@@ -37,8 +37,8 @@ jobs:
 
       - uses: actions/cache@v3
         with:
-          path: src/UFEMISM_program
-          key: ${{ github.sha }}-binary
+          path: src/
+          key: ${{ github.sha }}-src
 
   test:
     name: Test minimism
@@ -52,7 +52,7 @@ jobs:
       - uses: actions/cache@v3
         with:
           path: src/UFEMISM_program
-          key: ${{ github.sha }}-binary
+          key: ${{ github.sha }}-src
 
       - name: Install dependencies
         run: |
@@ -64,3 +64,31 @@ jobs:
         run: |
           cd tests
           mpirun -n 2 ../src/UFEMISM_program eismint_1.cfg
+
+  unit_tests:
+    name: Unit Test
+    runs-on: ubuntu-22.04
+    needs:
+      - build
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/cache@v3
+        with:
+          path: src/UFEMISM_program
+          key: ${{ github.sha }}-src
+
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install libopenmpi-dev libnetcdff-dev \
+                               netcdf-bin petsc-dev
+          pip install gcovr --upgrade
+      - name: build minimism
+        run: |
+          cd tests
+          make UFEMISM_unit_tests
+      - name: unit_test
+        run: |
+          cd tests
+          ./UFEMISM_unit_tests

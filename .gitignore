@@ -8,6 +8,8 @@ UFEMISM_program
 # Ignore the module and object files
 *.mod
 *.o
+*.gcno
+*.gcda
 
 # Ignore input data folder
 /data

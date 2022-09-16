@@ -96,7 +96,7 @@ all : $(all_programs)
 #       UFEMISM library for unit testing:
 # =============================================================
 
-TEST_DIR = ../tests
+TEST_DIR = ../unit_tests
 TEST_OBJ_DIR = ${TEST_DIR}/obj
 TEST_MOD_DIR = ${TEST_DIR}/mod
 TEST_OBJS = $(filter-out ${TEST_OBJ_DIR}/UFEMISM_program.o,$(UFEMISM_program_objects:%=$(TEST_OBJ_DIR)/%))
@@ -104,9 +104,9 @@ TEST_OBJS = $(filter-out ${TEST_OBJ_DIR}/UFEMISM_program.o,$(UFEMISM_program_obj
 $(TEST_OBJ_DIR)/%.o : %.f90 Makefile
 	$(F90) $(F90FLAGS) -J${TEST_MOD_DIR} -fbackslash -fprofile-arcs -ftest-coverage -c -o $@ $<
 
-unit_tests_lib: ../tests/UFEMISM.a
+unit_tests_lib: ${TEST_DIR}/UFEMISM.a
 
-../tests/UFEMISM.a : $(TEST_OBJS)
+${TEST_DIR}/UFEMISM.a : $(TEST_OBJS)
 	ar rcs $@ $^
 
 
