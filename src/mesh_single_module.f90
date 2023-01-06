@@ -28,10 +28,10 @@ contains
     call init_routine( routine_name)
 
     ! Determine the domain of this process' submesh.
-    ymin = minval(refgeo%grid%y)
-    ymax = maxval(refgeo%grid%y)
-    xmin = minval(refgeo%grid%x)
-    xmax = maxval(refgeo%grid%x)
+    ymin = refgeo%grid%ymin
+    ymax = refgeo%grid%ymax
+    xmin = refgeo%grid%xmin
+    xmax = refgeo%grid%xmax
 
     ! Allocate memory and initialise a dummy mesh
     call allocate_submesh_primary( submesh, region%name, 10, 20, C%nconmax)
@@ -124,7 +124,11 @@ contains
     INTEGER                                       :: x1, x2
     type(type_reference_geometry)                 :: refgeo
 
-    refgeo = region% refgeo_init
+    refgeo%grid = region% grid_output
+
+    allocate(refgeo%Hi_grid(refgeo%grid%nx, refgeo%grid%ny))
+    allocate(refgeo%Hb_grid(refgeo%grid%nx, refgeo%grid%ny))
+    allocate(refgeo%Hs_grid(refgeo%grid%nx, refgeo%grid%ny))
 
     ! Add routine to path
     CALL init_routine( routine_name)
@@ -142,9 +146,7 @@ contains
                                    // TRIM(region%mesh%region_name) // '...'
     end if
 
-    call calc_remapping_operator_mesh2grid(region%mesh, refgeo%grid)
     call partition_list( refgeo%grid%nx, par%i, par%n, x1, x2)
-
 
     call map_mesh2grid_2D( region%mesh, refgeo%grid, region%ice%Hi_a, refgeo%Hi_grid(x1:x2,:)) 
     call map_mesh2grid_2D( region%mesh, refgeo%grid, region%ice%Hb_a, refgeo%Hb_grid(x1:x2,:)) 
@@ -158,6 +160,11 @@ contains
 
     ! Pass it through
     call create_single_mesh_from_cart_data( region , refgeo, region%mesh_new)
+
+    ! Clean up
+    deallocate(refgeo%Hi_grid)
+    deallocate(refgeo%Hb_grid)
+    deallocate(refgeo%Hs_grid)
 
     ! Finalise routine path
     CALL finalise_routine( routine_name)

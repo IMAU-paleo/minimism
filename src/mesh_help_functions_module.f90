@@ -1600,8 +1600,7 @@ MODULE mesh_help_functions_module
 
     ! If p lies outside the mesh domain, throw an error
     IF (p(1) < mesh%xmin .OR. p(1) > mesh%xmax .OR. p(2) < mesh%ymin .OR. p(2) > mesh%ymax) THEN
-      WRITE(0,*) 'find_containing_triangle - ERROR: point lies outside mesh domain!'
-      STOP
+      error stop 'find_containing_triangle - ERROR: point lies outside mesh domain!'
     END IF
 
     ! See if the initial guess is correct.
