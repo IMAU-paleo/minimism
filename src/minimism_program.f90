@@ -1,4 +1,4 @@
-program UFEMISM_program
+program minimism_program
   ! The Utrecht Finite Element Multi-Ice-Sheet Model (UFEMISM),
   ! by Tijn Berends and Jorjo Bernales, 2019-2022.
   ! Institute for Marine and Atmospheric Research Utrecht (IMAU)
@@ -14,7 +14,7 @@ program UFEMISM_program
   ! the ice-sheet model (North America, Eurasia, Greenland, Antarctica,
   ! and Patagonia). These are all run individually for a prescribed
   ! number of years (the "coupling interval") through the subroutines
-  ! in the UFEMISM_main_model module, after which control is passed
+  ! in the minimism_main_model module, after which control is passed
   ! back to this program. At this point, the sea-level model SELEN is
   ! optionally called, some global output data is calculated and
   ! written to output files, and the coupling loop is run again.
@@ -62,7 +62,7 @@ program UFEMISM_program
   use forcing_module,            only : forcing, initialise_global_forcing
   use climate_module,            only : initialise_climate_model_global
   use ocean_module,              only : initialise_ocean_model_global
-  use UFEMISM_main_model,        only : initialise_model, run_model
+  use minimism_main_model,        only : initialise_model, run_model
   use general_sea_level_module,  only : update_regional_sea_level, determine_GMSL_contributions
   use scalar_data_output_module, only : initialise_global_scalar_data, write_global_scalar_data
 
@@ -95,7 +95,7 @@ program UFEMISM_program
 
   allocate(NAM,EAS,GRL,ANT)
 
-  routine_path = 'UFEMISM_program'
+  routine_path = 'minimism_program'
 
   ! Initialise MPI and PETSc
   call initialise_parallelisation
@@ -232,4 +232,4 @@ program UFEMISM_program
   call PetscFinalize( perr)
   call MPI_FINALIZE( ierr)
 
-end program UFEMISM_program
+end program minimism_program

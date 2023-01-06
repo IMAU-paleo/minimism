@@ -1,5 +1,5 @@
 # Ignore the main executable
-UFEMISM_program
+minimism_program
 
 # Ignore scripts in main folder
 /*.sh

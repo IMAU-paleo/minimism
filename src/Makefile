@@ -18,14 +18,14 @@ $(OBJ_PATH)/%.o : %.f90 Makefile
 
 
 # ================================================================
-#       Building the UFEMISM_program
+#       Building the minimism_program
 # ================================================================
 
 # Adding this program to the list of all programs:
-all_programs += UFEMISM_program
+all_programs += minimism_program
 
 # List of object files
-UFEMISM_program_objects = \
+minimism_program_objects = \
         configuration_module.o \
         reallocate.o \
         data_types_netcdf_module.o \
@@ -62,12 +62,12 @@ UFEMISM_program_objects = \
         BMB_module.o \
         SMB_module.o \
         scalar_data_output_module.o \
-        UFEMISM_main_model.o \
-        UFEMISM_program.o
+        minimism_main_model.o \
+        minimism_program.o
 
 # This rule is used to build an executable from the object files:
 # The executable (the target) depends on the object files:
-UFEMISM_program : $(UFEMISM_program_objects:%=$(OBJ_PATH)/%)
+minimism_program : $(minimism_program_objects:%=$(OBJ_PATH)/%)
 	$(F90) $(F90FLAGS)    -o $@ $^ $(LDFLAGS)
 
 
@@ -93,20 +93,20 @@ all : $(all_programs)
 
 
 # =============================================================
-#       UFEMISM library for unit testing:
+#       minimism library for unit testing:
 # =============================================================
 
 TEST_DIR = ../tests
 TEST_OBJ_DIR = ${TEST_DIR}/obj
 TEST_MOD_DIR = ${TEST_DIR}/mod
-TEST_OBJS = $(filter-out ${TEST_OBJ_DIR}/UFEMISM_program.o,$(UFEMISM_program_objects:%=$(TEST_OBJ_DIR)/%))
+TEST_OBJS = $(filter-out ${TEST_OBJ_DIR}/minimism_program.o,$(minimism_program_objects:%=$(TEST_OBJ_DIR)/%))
 
 $(TEST_OBJ_DIR)/%.o : %.f90 Makefile
 	$(F90) $(F90FLAGS) -J${TEST_MOD_DIR} -fbackslash -fprofile-arcs -ftest-coverage -c -o $@ $<
 
-unit_tests_lib: ../tests/UFEMISM.a
+unit_tests_lib: ../tests/minimism.a
 
-../tests/UFEMISM.a : $(TEST_OBJS)
+../tests/minimism.a : $(TEST_OBJS)
 	ar rcs $@ $^
 
 
