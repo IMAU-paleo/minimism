@@ -642,7 +642,7 @@ module data_types_module
     REAL(dp), DIMENSION(:,:  ), allocatable :: Hb_grid
     REAL(dp), DIMENSION(:,:  ), allocatable :: Hs_grid
 
-    ! Derived data on the grid (allocatablevature and masks, needed for mesh creation)
+    ! Derived data on the grid (curvature and masks, needed for mesh creation)
     REAL(dp), DIMENSION(:,:  ), allocatable :: surf_curv
     INTEGER,  DIMENSION(:,:  ), allocatable :: mask_land
     INTEGER,  DIMENSION(:,:  ), allocatable :: mask_ocean

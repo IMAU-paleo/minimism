@@ -134,7 +134,6 @@ MODULE configuration_module
   REAL(dp)            :: res_max_mountain_config                     = 40._dp                           !                                 mountains             [km]
   REAL(dp)            :: res_max_coast_config                        = 40._dp                           !                                 coastline             [km]
   REAL(dp)            :: mesh_fitness_threshold_config               = 0.95_dp                          ! Minimum allowed mesh fitness (fraction of triangles that are not Bad) before mesh updating
-  logical             :: use_submesh_config                          = .true.
 
   ! Resolutions of the different square grids
   ! =========================================
@@ -711,7 +710,6 @@ MODULE configuration_module
     REAL(dp)                            :: res_max_mountain
     REAL(dp)                            :: res_max_coast
     REAL(dp)                            :: mesh_fitness_threshold
-    logical                             :: use_submesh
 
     ! Resolutions of the different square grids
     ! =========================================
@@ -1581,7 +1579,6 @@ CONTAINS
                      res_max_mountain_config,                         &
                      res_max_coast_config,                            &
                      mesh_fitness_threshold_config,                   &
-                     use_submesh_config,                              &
                      dx_grid_output_config,                           &
                      dx_grid_GIA_config,                              &
                      dx_grid_smooth_config,                           &
@@ -1874,7 +1871,6 @@ CONTAINS
     C%res_max_mountain                         = res_max_mountain_config
     C%res_max_coast                            = res_max_coast_config
     C%mesh_fitness_threshold                   = mesh_fitness_threshold_config
-    C%use_submesh                              = use_submesh_config
 
     ! The smallest allowed resolution
     C%res_min = MIN( MIN( MIN( MIN( C%res_max_margin, C%res_max_gl), C%res_max_cf), C%res_max_mountain), C%res_max_coast)

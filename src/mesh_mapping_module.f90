@@ -706,7 +706,7 @@ CONTAINS
 
     ! In/output variables
     TYPE(type_grid),                     INTENT(INOUT) :: grid
-    TYPE(type_mesh),                     INTENT(INOUT) :: mesh
+    TYPE(type_mesh),                     INTENT(IN)    :: mesh
 
     ! Local variables:
     CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'calc_remapping_operator_grid2mesh'
@@ -1085,8 +1085,10 @@ CONTAINS
 
     !IF (par%master) WRITE(0,*) 'calc_remapping_operator_mesh2grid - finding all grid cells overlapping with small/big triangles...'
 
-    allocate(overlaps_with_small_triangle( grid%nx, grid%ny ), source=0)
-    allocate(containing_triangle ( grid%nx, grid%ny), source=0)
+    allocate(overlaps_with_small_triangle( grid%nx, grid%ny ))
+    allocate(containing_triangle ( grid%nx, grid%ny))
+    overlaps_with_small_triangle = 0
+    containing_triangle = 0
 
     DO ti = mesh%ti1, mesh%ti2
 

@@ -11,11 +11,10 @@ module UFEMISM_main_model
                                             type_climate_matrix_global, type_ocean_matrix_global
   use reference_fields_module,       only : initialise_reference_geometries, map_reference_geometries_to_mesh
   use mesh_memory_module,            only : deallocate_mesh_all
-  use mesh_creation_module,          only : create_mesh_from_cart_data
   use mesh_mapping_module,           only : calc_remapping_operators_mesh_mesh, deallocate_remapping_operators_mesh_mesh, &
                                             calc_remapping_operator_mesh2grid, deallocate_remapping_operators_mesh2grid, &
                                             calc_remapping_operator_grid2mesh, deallocate_remapping_operators_grid2mesh
-  use mesh_update_module,            only : determine_mesh_fitness, create_new_mesh
+  use mesh_update_module,            only : determine_mesh_fitness
   use mesh_single_module,            only : create_new_mesh_single, create_single_mesh_from_cart_data
   use netcdf_module,                 only : initialise_debug_fields, create_output_files, associate_debug_fields, &
                                             write_to_output_files, create_debug_file, reallocate_debug_fields
@@ -313,12 +312,7 @@ contains
     ! Add routine to path
     call init_routine( routine_name)
 
-    ! Create a new mesh
-    if (C%use_submesh) then
-      call create_new_mesh( region)
-    else
-      call create_new_mesh_single( region)
-    end if
+    call create_new_mesh_single( region)
 
     if (par%master) then
       write(*,"(A)") '  Reallocating and remapping after mesh update...'
@@ -504,11 +498,10 @@ contains
     ! ===== The mesh =====
     ! ====================
 
-    if (C%use_submesh) then
-      call create_mesh_from_cart_data( region)
-    else
-      call create_single_mesh_from_cart_data( region)
-    endif
+    if (par%master) then
+      write(*,"(A)") '  Creating the first mesh...'
+    end if
+    call create_single_mesh_from_cart_data( region, region%refgeo_init, region%mesh)
 
     ! ===== Reference geometries: grid to mesh =====
     ! ==============================================
