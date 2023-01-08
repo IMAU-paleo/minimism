@@ -370,209 +370,210 @@ CONTAINS
 
   END SUBROUTINE inverse_oblique_sg_projection
 
-! ! == Map data between two square grids using 2nd-order conservative remapping
-!   SUBROUTINE map_square_to_square_cons_2nd_order_2D( nx_src, ny_src, x_src, y_src, nx_dst, ny_dst, x_dst, y_dst, d_src, d_dst)
-!     ! Map data from one square grid to another (e.g. PD ice thickness from the square grid in the input file to the model square grid)
+ ! == Map data between two square grids using 2nd-order conservative remapping
+   SUBROUTINE map_square_to_square_cons_2nd_order_2D( src, dst, d_src, d_dst)
+     ! Map data from one square grid to another (e.g. PD ice thickness from the square grid in the input file to the model square grid)
+     use data_types_module, only: type_grid
 
-!     IMPLICIT NONE
+     IMPLICIT NONE
 
-!     ! Input and output variables
-!     INTEGER,                            INTENT(IN)    :: nx_src
-!     INTEGER,                            INTENT(IN)    :: ny_src
-!     REAL(dp), DIMENSION(:    ),         INTENT(IN)    :: x_src
-!     REAL(dp), DIMENSION(:    ),         INTENT(IN)    :: y_src
-!     INTEGER,                            INTENT(IN)    :: nx_dst
-!     INTEGER,                            INTENT(IN)    :: ny_dst
-!     REAL(dp), DIMENSION(:    ),         INTENT(IN)    :: x_dst
-!     REAL(dp), DIMENSION(:    ),         INTENT(IN)    :: y_dst
-!     REAL(dp), DIMENSION(:,:  ),         INTENT(IN)    :: d_src
-!     REAL(dp), DIMENSION(:,:  ),         INTENT(OUT)   :: d_dst
+     ! Input and output variables
+     type(type_grid),                   intent(in)     :: src
+     type(type_grid),                   intent(in)     :: dst
+     REAL(dp), DIMENSION(:,:  ),        intent(in)     :: d_src
+     REAL(dp), DIMENSION(:,:  ),        intent(out)    :: d_dst
 
-!     ! Local variables:
-!     CHARACTER(LEN=256), PARAMETER                     :: routine_name = 'map_square_to_square_cons_2nd_order_2D'
-!     INTEGER                                           :: i,j,i_src,j_src,i1,i2,igmin,igmax,jgmin,jgmax,j1,j2
-!     REAL(dp)                                          :: dx_src, dy_src, dx_dst, dy_dst, xcmin, xcmax, ycmin, ycmax
-!     INTEGER,  DIMENSION(nx_dst,2)                     :: ir_src
-!     INTEGER,  DIMENSION(ny_dst,2)                     :: jr_src
-!     REAL(dp)                                          :: xomin, xomax, yomin, yomax, w0, w1x, w1y
-!     REAL(dp)                                          :: Ad, Asd, Asum
-!     REAL(dp), DIMENSION(:,:  ), POINTER               ::  ddx_src,  ddy_src
-!     INTEGER                                           :: wddx_src, wddy_src
-!     INTEGER,  DIMENSION(:,:  ), POINTER               ::  mask_dst_outside_src
-!     INTEGER                                           :: wmask_dst_outside_src
-!     REAL(dp)                                          :: LI_mxydx1, LI_mxydx2, LI_mxydx3, LI_mxydx4
-!     REAL(dp)                                          :: LI_xydy1, LI_xydy2, LI_xydy3, LI_xydy4
+     ! pointers
+     INTEGER                                           :: nx_src
+     INTEGER                                           :: ny_src
+     REAL(dp), DIMENSION(src%nx)                       :: x_src
+     REAL(dp), DIMENSION(src%ny)                       :: y_src
+     INTEGER                                           :: nx_dst
+     INTEGER                                           :: ny_dst
+     REAL(dp), DIMENSION(dst%nx)                       :: x_dst
+     REAL(dp), DIMENSION(dst%ny)                       :: y_dst
 
-!     ! Allocate shared memory
-!     CALL allocate_shared_dp_2D(  ny_src, nx_src, ddx_src,              wddx_src             )
-!     CALL allocate_shared_dp_2D(  ny_src, nx_src, ddy_src,              wddy_src             )
-!     CALL allocate_shared_int_2D( ny_dst, nx_dst, mask_dst_outside_src, wmask_dst_outside_src)
+     ! Local variables:
+     CHARACTER(LEN=256), PARAMETER                     :: routine_name = 'map_square_to_square_cons_2nd_order_2D'
+     INTEGER                                           :: i,j,i_src,j_src,igmin,igmax,jgmin,jgmax
+     REAL(dp)                                          :: dx_src, dy_src, dx_dst, dy_dst, xcmin, xcmax, ycmin, ycmax
+     INTEGER,  DIMENSION(dst%ny,2)                     :: ir_src
+     INTEGER,  DIMENSION(dst%nx,2)                     :: jr_src
+     REAL(dp)                                          :: xomin, xomax, yomin, yomax, w0, w1x, w1y
+     REAL(dp)                                          :: Ad, Asd, Asum
+     REAL(dp), DIMENSION(:,:  ), allocatable           ::  ddx_src,  ddy_src
+     INTEGER,  DIMENSION(:,:  ), allocatable           ::  mask_dst_outside_src
+     REAL(dp)                                          :: LI_mxydx1, LI_mxydx2, LI_mxydx3, LI_mxydx4
+     REAL(dp)                                          :: LI_xydy1, LI_xydy2, LI_xydy3, LI_xydy4
 
-!     ! Find grid spacings
-!     dx_src = x_src(2) - x_src(1)
-!     dy_src = y_src(2) - y_src(1)
-!     dx_dst = x_dst(2) - x_dst(1)
-!     dy_dst = y_dst(2) - y_dst(1)
-!     Ad = dx_dst * dy_dst
+     ! Set local vars
+     nx_src = src%nx
+     ny_src = src%ny
+     x_src  = src%x
+     y_src  = src%y
+     nx_dst = dst%nx
+     ny_dst = dst%ny
+     x_dst  = dst%x
+     y_dst  = dst%y
 
-!     ! If the grids are equal, the solution is trivial; just copy the data
-!     IF (dx_src == dx_dst .AND. dy_src == dy_dst .AND. nx_src == nx_dst .AND. ny_src == ny_dst) THEN
-!       CALL partition_list( nx_dst, par%i, par%n, i1, i2)
-!       d_dst( :,i1:i2) = d_src( :,i1:i2)
-!       CALL sync
-!       RETURN
-!     END IF
+     ! Allocate shared memory
+     allocate( ddx_src              (ny_src, nx_src))
+     allocate( ddy_src              (ny_src, nx_src))
+     allocate( mask_dst_outside_src (ny_dst, nx_dst))
 
-!     ! Find overlaps between grids
-!     DO i = 1, nx_dst
-!       ! Dst cell i overlaps with src cells ir_src( i,1) to ir_src( i,2)
-!       xcmin = x_dst( i) - dx_dst/2._dp
-!       xcmax = x_dst( i) + dx_dst/2._dp
-!       ir_src( i,:) = MAX( 1, MIN( nx_src, [CEILING(-1.5_dp + FLOOR(nx_src/2._dp) + xcmin / dx_src), &
-!                                            CEILING( 1.5_dp + FLOOR(nx_src/2._dp) + xcmax / dx_src)] ))
-!     END DO ! DO i = 1, nx_dst
-!     DO j = 1, ny_dst
-!       ! Dst cell j overlaps with src cells jr_src( j,1) to ir_src( j,2)
-!       ycmin = y_dst( j) - dy_dst/2._dp
-!       ycmax = y_dst( j) + dy_dst/2._dp
-!       jr_src( j,:) = MAX( 1, MIN( ny_src, [CEILING(-1.5_dp + FLOOR(ny_src/2._dp) + ycmin / dy_src), &
-!                                            CEILING( 1.5_dp + FLOOR(ny_src/2._dp) + ycmax / dy_src)] ))
-!     END DO ! DO j = 1, ny_dst
+     ! Find grid spacings
+     dx_src = x_src(2) - x_src(1)
+     dy_src = y_src(2) - y_src(1)
+     dx_dst = x_dst(2) - x_dst(1)
+     dy_dst = y_dst(2) - y_dst(1)
+     Ad = dx_dst * dy_dst
 
-!     ! Get derivatives of d_src
-!     CALL partition_list( nx_src, par%i, par%n, i1, i2)
-!     DO i = MAX(2,i1), MIN(nx_src-1,i2)
-!     DO j = 2, ny_src-1
-!       ddx_src( j,i) = (d_src( j,i+1) - d_src( j,i-1)) / (2._dp * dx_src)
-!       ddy_src( j,i) = (d_src( j+1,i) - d_src( j-1,i)) / (2._dp * dy_src)
-!     END DO
-!     END DO
-!     CALL sync
+     ! If the grids are equal, the solution is trivial; just copy the data
+     IF (dx_src == dx_dst .AND. dy_src == dy_dst .AND. nx_src == nx_dst .AND. ny_src == ny_dst) THEN
+       d_dst = d_src
+       RETURN
+     END IF
 
-!     ! Find parallelisation domains
-!     CALL partition_list( nx_dst, par%i, par%n, i1, i2)
-!     CALL partition_list( ny_dst, par%i, par%n, j1, j2)
+     ! Find overlaps between grids
+     DO i = 1, nx_dst
+       ! Dst cell i overlaps with src cells ir_src( i,1) to ir_src( i,2)
+       xcmin = x_dst( i) - dx_dst/2._dp
+       xcmax = x_dst( i) + dx_dst/2._dp
+       ir_src( i,1) = max( 1, ceiling((xcmin-x_src(1)+dx_src/2._dp)/dx_src))
+       ir_src( i,2) = min( nx_src, ceiling((xcmax-x_src(1)+dx_src/2._dp)/dx_src))
+     END DO ! DO i = 1, nx_dst
+     DO j = 1, ny_dst
+       ! Dst cell j overlaps with src cells jr_src( j,1) to ir_src( j,2)
+       ycmin = y_dst( j) - dy_dst/2._dp
+       ycmax = y_dst( j) + dy_dst/2._dp
+       jr_src( j,1) = max( 1, ceiling((ycmin-y_src(1)+dy_src/2._dp)/dy_src))
+       jr_src( j,2) = min( ny_src, ceiling((ycmax-y_src(1)+dy_src/2._dp)/dy_src))
+     END DO ! DO j = 1, ny_dst
 
-!     DO i = i1, i2
-!     DO j = 1, ny_dst
+     ! Get derivatives of d_src
+     DO i = 2, nx_src-1
+     DO j = 2, ny_src-1
+       ddx_src( i,j) = (d_src( i+1,j) - d_src( i-1,j)) / (2._dp * dx_src)
+       ddy_src( i,j) = (d_src( i,j+1) - d_src( i,j-1)) / (2._dp * dy_src)
+     END DO
+     END DO
 
-!       d_dst(                j,i) = 0._dp
-!       mask_dst_outside_src( j,i) = 0
-!       Asum                       = 0._dp
+     DO i = 1, nx_dst
+     DO j = 1, ny_dst
 
-!       DO i_src = ir_src( i,1), ir_src( i,2)
-!       DO j_src = jr_src( j,1), jr_src( j,2)
+       d_dst(                i,j) = 0._dp
+       mask_dst_outside_src( i,j) = 0
+       Asum                       = 0._dp
 
-!         xomin = MAX( x_dst( i) - dx_dst/2._dp, x_src( i_src) - dx_src/2._dp)
-!         xomax = MIN( x_dst( i) + dx_dst/2._dp, x_src( i_src) + dx_src/2._dp)
-!         yomin = MAX( y_dst( j) - dy_dst/2._dp, y_src( j_src) - dy_src/2._dp)
-!         yomax = MIN( y_dst( j) + dy_dst/2._dp, y_src( j_src) + dy_src/2._dp)
+       DO i_src = ir_src( i,1), ir_src( i,2)
+       DO j_src = jr_src( j,1), jr_src( j,2)
 
-!         IF (xomax <= xomin .OR. yomax <= yomin) CYCLE
+         xomin = MAX( x_dst( i) - dx_dst/2._dp, x_src( i_src) - dx_src/2._dp)
+         xomax = MIN( x_dst( i) + dx_dst/2._dp, x_src( i_src) + dx_src/2._dp)
+         yomin = MAX( y_dst( j) - dy_dst/2._dp, y_src( j_src) - dy_src/2._dp)
+         yomax = MIN( y_dst( j) + dy_dst/2._dp, y_src( j_src) + dy_src/2._dp)
 
-!         Asd  = (xomax - xomin) * (yomax - yomin)
-!         Asum = Asum + Asd
+         IF (xomax <= xomin .OR. yomax <= yomin) CYCLE
 
-!         w0  = Asd / Ad
+         Asd  = (xomax - xomin) * (yomax - yomin)
+         Asum = Asum + Asd
 
-!         CALL line_integral_mxydx( [xomin,yomin], [xomax,yomin], 1E-9_dp, LI_mxydx1)
-!         CALL line_integral_mxydx( [xomax,yomin], [xomax,yomax], 1E-9_dp, LI_mxydx2)
-!         CALL line_integral_mxydx( [xomax,yomax], [xomin,yomax], 1E-9_dp, LI_mxydx3)
-!         CALL line_integral_mxydx( [xomin,yomax], [xomin,yomin], 1E-9_dp, LI_mxydx4)
+         w0  = Asd / Ad
 
-!         w1x = 1._dp / Ad * (LI_mxydx1 + LI_mxydx2 + LI_mxydx3 + LI_mxydx4) - w0 * x_src( i_src)
+         CALL line_integral_mxydx( [xomin,yomin], [xomax,yomin], 1E-9_dp, LI_mxydx1)
+         CALL line_integral_mxydx( [xomax,yomin], [xomax,yomax], 1E-9_dp, LI_mxydx2)
+         CALL line_integral_mxydx( [xomax,yomax], [xomin,yomax], 1E-9_dp, LI_mxydx3)
+         CALL line_integral_mxydx( [xomin,yomax], [xomin,yomin], 1E-9_dp, LI_mxydx4)
 
-!         CALL line_integral_xydy(  [xomin,yomin], [xomax,yomin], 1E-9_dp, LI_xydy1)
-!         CALL line_integral_xydy(  [xomax,yomin], [xomax,yomax], 1E-9_dp, LI_xydy2)
-!         CALL line_integral_xydy(  [xomax,yomax], [xomin,yomax], 1E-9_dp, LI_xydy3)
-!         CALL line_integral_xydy(  [xomin,yomax], [xomin,yomin], 1E-9_dp, LI_xydy4)
+         w1x = 1._dp / Ad * (LI_mxydx1 + LI_mxydx2 + LI_mxydx3 + LI_mxydx4) - w0 * x_src( i_src)
 
-!         w1y = 1._dp / Ad * (LI_xydy1  + LI_xydy2  + LI_xydy3  + LI_xydy4 ) - w0 * y_src( j_src)
+         CALL line_integral_xydy(  [xomin,yomin], [xomax,yomin], 1E-9_dp, LI_xydy1)
+         CALL line_integral_xydy(  [xomax,yomin], [xomax,yomax], 1E-9_dp, LI_xydy2)
+         CALL line_integral_xydy(  [xomax,yomax], [xomin,yomax], 1E-9_dp, LI_xydy3)
+         CALL line_integral_xydy(  [xomin,yomax], [xomin,yomin], 1E-9_dp, LI_xydy4)
 
-!         d_dst( j,i) = d_dst( j,i) + w0  * d_src(   j_src,i_src) + &
-!                                     w1x * ddx_src( j_src,i_src) + &
-!                                     w1y * ddy_src( j_src,i_src)
+         w1y = 1._dp / Ad * (LI_xydy1  + LI_xydy2  + LI_xydy3  + LI_xydy4 ) - w0 * y_src( j_src)
 
-!       END DO ! DO j_src = jr_src( j,1), jr_src( j,2)
-!       END DO ! DO i_src = ir_src( i,1), ir_src( i,2)
+         d_dst( i,j) = d_dst( i,j) + w0  * d_src(   i_src,j_src) + &
+                                     w1x * ddx_src( i_src,j_src) + &
+                                     w1y * ddy_src( i_src,j_src)
 
-!       IF (Asum < Ad) mask_dst_outside_src( j,i) = 1
+       END DO ! DO j_src = jr_src( j,1), jr_src( j,2)
+       END DO ! DO i_src = ir_src( i,1), ir_src( i,2)
 
-!     END DO ! DO j = 1, ny_dst
-!     END DO ! DO i = i1, i2
-!     CALL sync
+       IF (Asum < Ad) mask_dst_outside_src( i,j) = 1
 
-!     ! Use nearest-neighbour extrapolation for dst cells outside of the src grid
-!     ! =========================================================================
+     END DO ! DO j = 1, ny_dst
+     END DO ! DO i = i1, i2
 
-!     ! Find the range of grid cells that were mapped correctly
-!     igmin = 0
-!     igmax = 0
-!     jgmin = 0
-!     jgmax = 0
+     ! Use nearest-neighbour extrapolation for dst cells outside of the src grid
+     ! =========================================================================
 
-!     j = INT( REAL(ny_dst,dp)/2._dp)
-!     DO i = 1, nx_dst
-!       IF (mask_dst_outside_src( j,i) == 0) THEN
-!         igmin = i
-!         EXIT
-!       END IF
-!     END DO
-!     DO i = nx_dst, 1, -1
-!       IF (mask_dst_outside_src( j,i) == 0) THEN
-!         igmax = i
-!         EXIT
-!       END IF
-!     END DO
+     ! Find the range of grid cells that were mapped correctly
+     igmin = 0
+     igmax = 0
+     jgmin = 0
+     jgmax = 0
 
-!     i = INT( REAL(nx_dst,dp)/2._dp)
-!     DO j = 1, ny_dst
-!       IF (mask_dst_outside_src( j,i) == 0) THEN
-!         jgmin = j
-!         EXIT
-!       END IF
-!     END DO
-!     DO j = ny_dst, 1, -1
-!       IF (mask_dst_outside_src( j,i) == 0) THEN
-!         jgmax = j
-!         EXIT
-!       END IF
-!     END DO
+     j = INT( REAL(ny_dst,dp)/2._dp)
+     DO i = 1, nx_dst
+       IF (mask_dst_outside_src( j,i) == 0) THEN
+         igmin = i
+         EXIT
+       END IF
+     END DO
+     DO i = nx_dst, 1, -1
+       IF (mask_dst_outside_src( j,i) == 0) THEN
+         igmax = i
+         EXIT
+       END IF
+     END DO
 
-!     ! Corners
-!     IF (par%master) THEN
-!       ! Southwest
-!       d_dst( 1      :jgmin-1 ,1      :igmin-1) = d_dst( jgmin,igmin)
-!       ! Southeast
-!       d_dst( 1      :jgmin-1 ,igmax+1:nx_dst ) = d_dst( jgmin,igmax)
-!       ! Northwest
-!       d_dst( jgmax+1:ny_dst  ,1      :igmin-1) = d_dst( jgmax,igmin)
-!       ! Northeast
-!       d_dst( jgmax+1:ny_dst  ,igmax+1:nx_dst ) = d_dst( jgmax,igmax)
-!     END IF ! IF (par%master) THEN
-!     CALL sync
+     i = INT( REAL(nx_dst,dp)/2._dp)
+     DO j = 1, ny_dst
+       IF (mask_dst_outside_src( j,i) == 0) THEN
+         jgmin = j
+         EXIT
+       END IF
+     END DO
+     DO j = ny_dst, 1, -1
+       IF (mask_dst_outside_src( j,i) == 0) THEN
+         jgmax = j
+         EXIT
+       END IF
+     END DO
 
-!     ! Borders
-!     DO i = MAX(i1,igmin), MIN(i2,igmax)
-!       ! South
-!       d_dst( 1      :jgmin-1,i) = d_dst( jgmin,i)
-!       ! North
-!       d_dst( jgmax+1:ny_dst ,i) = d_dst( jgmax,i)
-!     END DO
-!     DO j = MAX(j1,jgmin), MIN(j2,jgmax)
-!       ! West
-!       d_dst( j,1      :igmin-1) = d_dst( j,igmin)
-!       ! East
-!       d_dst( j,igmax+1:nx_dst ) = d_dst( j,igmax)
-!     END DO
-!     CALL sync
+     ! Corners
+     ! Southwest
 
-!     ! Clean up after yourself
-!     CALL deallocate_shared( wddx_src             )
-!     CALL deallocate_shared( wddy_src             )
-!     CALL deallocate_shared( wmask_dst_outside_src)
+     d_dst( 1      :jgmin-1 ,1      :igmin-1) = d_dst( jgmin,igmin)
+     ! Southeast
+     d_dst( 1      :jgmin-1 ,igmax+1:nx_dst ) = d_dst( jgmin,igmax)
+     ! Northwest
+     d_dst( jgmax+1:ny_dst  ,1      :igmin-1) = d_dst( jgmax,igmin)
+     ! Northeast
+     d_dst( jgmax+1:ny_dst  ,igmax+1:nx_dst ) = d_dst( jgmax,igmax)
 
-!   END SUBROUTINE map_square_to_square_cons_2nd_order_2D
+     ! Borders
+     DO i = MAX(1,igmin), MIN(nx_dst,igmax)
+       ! South
+       d_dst( 1      :jgmin-1,i) = d_dst( jgmin,i)
+       ! North
+       d_dst( jgmax+1:ny_dst ,i) = d_dst( jgmax,i)
+     END DO
+     DO j = MAX(1,jgmin), MIN(ny_dst,jgmax)
+       ! West
+       d_dst( j,1      :igmin-1) = d_dst( j,igmin)
+       ! East
+       d_dst( j,igmax+1:nx_dst ) = d_dst( j,igmax)
+     END DO
+
+     ! Clean up after yourself
+     deallocate( ddx_src             )
+     deallocate( ddy_src             )
+     deallocate( mask_dst_outside_src)
+
+   END SUBROUTINE map_square_to_square_cons_2nd_order_2D
 !   SUBROUTINE map_square_to_square_cons_2nd_order_3D( nx_src, ny_src, x_src, y_src, nx_dst, ny_dst, x_dst, y_dst, d_src, d_dst)
 !     ! Map data from one square grid to another (e.g. PD ice thickness from the square grid in the input file to the model square grid)
 

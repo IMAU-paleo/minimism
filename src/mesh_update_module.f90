@@ -19,8 +19,8 @@ MODULE mesh_update_module
                                              new_triangle_contains_old_mask, write_mesh_to_text_file, is_boundary_segment, is_encroached_upon
   USE mesh_memory_module,              ONLY: allocate_submesh_primary, extend_submesh_primary
   USE mesh_Delaunay_module,            ONLY: split_triangle
-  USE mesh_creation_module,            ONLY: initialise_dummy_mesh, perturb_dummy_mesh, align_all_submeshes, refine_submesh_geo_only, debug_mesh_creation, &
-                                             merge_all_submeshes, create_final_mesh_from_merged_submesh, Lloyds_algorithm_single_iteration_submesh
+  USE mesh_creation_module,            ONLY: initialise_dummy_mesh, perturb_dummy_mesh, refine_submesh_geo_only, debug_mesh_creation, &
+                                             create_final_mesh_from_merged_submesh, Lloyds_algorithm_single_iteration_submesh
   USE mesh_operators_module,           ONLY: d2dx2_a_to_a_2D, d2dxdy_a_to_a_2D, d2dy2_a_to_a_2D
   use mpi_module,                      only: allgather_array
 

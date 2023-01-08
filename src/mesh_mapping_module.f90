@@ -1457,7 +1457,9 @@ CONTAINS
 
     CALL calc_remapping_operators_mesh_mesh_trilin(            mesh_src, mesh_dst, map%M_trilin)
     CALL calc_remapping_operators_mesh_mesh_nearest_neighbour( mesh_src, mesh_dst, map%M_nearest_neighbour)
-    CALL calc_remapping_operators_mesh_mesh_conservative(      mesh_src, mesh_dst, map%M_cons_1st_order, map%M_cons_2nd_order)
+    ! CALL calc_remapping_operators_mesh_mesh_conservative(      mesh_src, mesh_dst, map%M_cons_1st_order, map%M_cons_2nd_order)
+    CALL calc_remapping_operators_mesh_mesh_nearest_neighbour( mesh_src, mesh_dst, map%M_cons_1st_order)
+    CALL calc_remapping_operators_mesh_mesh_nearest_neighbour( mesh_src, mesh_dst, map%M_cons_2nd_order)
 
     ! Finalise routine path
     CALL finalise_routine( routine_name)

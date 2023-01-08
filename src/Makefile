@@ -36,6 +36,7 @@ UFEMISM_program_objects = \
         parameters_module.o \
         utilities_module.o \
         sparse_matrix_module.o \
+        grid_module.o \
         mesh_memory_module.o \
         mesh_help_functions_module.o \
         mesh_Delaunay_module.o \
@@ -45,7 +46,6 @@ UFEMISM_program_objects = \
         mesh_is_good_triangle.o \
         mesh_creation_module.o \
         mesh_update_module.o \
-        mesh_single_module.o \
         zeta_module.o \
         netcdf_module.o \
         forcing_module.o \
