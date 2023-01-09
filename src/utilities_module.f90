@@ -397,8 +397,8 @@ CONTAINS
      CHARACTER(LEN=256), PARAMETER                     :: routine_name = 'map_square_to_square_cons_2nd_order_2D'
      INTEGER                                           :: i,j,i_src,j_src,igmin,igmax,jgmin,jgmax
      REAL(dp)                                          :: dx_src, dy_src, dx_dst, dy_dst, xcmin, xcmax, ycmin, ycmax
-     INTEGER,  DIMENSION(dst%ny,2)                     :: ir_src
-     INTEGER,  DIMENSION(dst%nx,2)                     :: jr_src
+     INTEGER,  DIMENSION(dst%nx,2)                     :: ir_src
+     INTEGER,  DIMENSION(dst%ny,2)                     :: jr_src
      REAL(dp)                                          :: xomin, xomax, yomin, yomax, w0, w1x, w1y
      REAL(dp)                                          :: Ad, Asd, Asum
      REAL(dp), DIMENSION(:,:  ), allocatable           ::  ddx_src,  ddy_src
@@ -417,9 +417,9 @@ CONTAINS
      y_dst  = dst%y
 
      ! Allocate shared memory
-     allocate( ddx_src              (ny_src, nx_src))
-     allocate( ddy_src              (ny_src, nx_src))
-     allocate( mask_dst_outside_src (ny_dst, nx_dst))
+     allocate( ddx_src              (nx_src, ny_src))
+     allocate( ddy_src              (nx_src, ny_src))
+     allocate( mask_dst_outside_src (nx_dst, ny_dst))
 
      ! Find grid spacings
      dx_src = x_src(2) - x_src(1)
@@ -517,13 +517,13 @@ CONTAINS
 
      j = INT( REAL(ny_dst,dp)/2._dp)
      DO i = 1, nx_dst
-       IF (mask_dst_outside_src( j,i) == 0) THEN
+       IF (mask_dst_outside_src( i,j) == 0) THEN
          igmin = i
          EXIT
        END IF
      END DO
      DO i = nx_dst, 1, -1
-       IF (mask_dst_outside_src( j,i) == 0) THEN
+       IF (mask_dst_outside_src( i,j) == 0) THEN
          igmax = i
          EXIT
        END IF
@@ -531,13 +531,13 @@ CONTAINS
 
      i = INT( REAL(nx_dst,dp)/2._dp)
      DO j = 1, ny_dst
-       IF (mask_dst_outside_src( j,i) == 0) THEN
+       IF (mask_dst_outside_src( i,j) == 0) THEN
          jgmin = j
          EXIT
        END IF
      END DO
      DO j = ny_dst, 1, -1
-       IF (mask_dst_outside_src( j,i) == 0) THEN
+       IF (mask_dst_outside_src( i,j) == 0) THEN
          jgmax = j
          EXIT
        END IF
@@ -546,26 +546,26 @@ CONTAINS
      ! Corners
      ! Southwest
 
-     d_dst( 1      :jgmin-1 ,1      :igmin-1) = d_dst( jgmin,igmin)
+     d_dst( 1      :igmin-1 ,1      :jgmin-1) = d_dst( igmin,jgmin)
      ! Southeast
-     d_dst( 1      :jgmin-1 ,igmax+1:nx_dst ) = d_dst( jgmin,igmax)
+     d_dst( 1      :igmin-1 ,jgmax+1:ny_dst ) = d_dst( igmin,jgmax)
      ! Northwest
-     d_dst( jgmax+1:ny_dst  ,1      :igmin-1) = d_dst( jgmax,igmin)
+     d_dst( igmax+1:nx_dst  ,1      :jgmin-1) = d_dst( igmax,jgmin)
      ! Northeast
-     d_dst( jgmax+1:ny_dst  ,igmax+1:nx_dst ) = d_dst( jgmax,igmax)
+     d_dst( igmax+1:nx_dst  ,jgmax+1:ny_dst ) = d_dst( igmax,jgmax)
 
      ! Borders
      DO i = MAX(1,igmin), MIN(nx_dst,igmax)
-       ! South
-       d_dst( 1      :jgmin-1,i) = d_dst( jgmin,i)
-       ! North
-       d_dst( jgmax+1:ny_dst ,i) = d_dst( jgmax,i)
+       ! West
+       d_dst( i,1      :jgmin-1) = d_dst( i,jgmin)
+       ! East
+       d_dst( i,jgmax+1:ny_dst ) = d_dst( i,jgmax)
      END DO
      DO j = MAX(1,jgmin), MIN(ny_dst,jgmax)
-       ! West
-       d_dst( j,1      :igmin-1) = d_dst( j,igmin)
-       ! East
-       d_dst( j,igmax+1:nx_dst ) = d_dst( j,igmax)
+       ! South
+       d_dst( 1      :igmin-1,j) = d_dst( igmin,j)
+       ! North
+       d_dst( igmax+1:nx_dst ,j) = d_dst( igmax,j)
      END DO
 
      ! Clean up after yourself

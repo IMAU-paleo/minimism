@@ -154,16 +154,11 @@ MODULE mesh_creation_module
     CHARACTER(LEN=256), PARAMETER                 :: routine_name = 'update_mesh'
     INTEGER                                       :: x1, x2
     type(type_reference_geometry)                 :: refgeo
-    type(type_reference_geometry)                 :: refgeo_fine
-
-    call initialise_model_square_grid( region, refgeo%grid, C%dx_remesh_grid)
-
-    allocate(refgeo%Hi_grid(refgeo%grid%nx, refgeo%grid%ny))
-    allocate(refgeo%Hb_grid(refgeo%grid%nx, refgeo%grid%ny))
-    allocate(refgeo%Hs_grid(refgeo%grid%nx, refgeo%grid%ny))
 
     ! Add routine to path
     CALL init_routine( routine_name)
+
+    refgeo = region%refgeo_init
 
     ! Screen meesage
     if (par%master) then
@@ -178,25 +173,26 @@ MODULE mesh_creation_module
                                    // TRIM(region%mesh%region_name) // '...'
     end if
 
+    call calc_remapping_operator_mesh2grid( region%mesh, refgeo%grid)
+
     call partition_list( refgeo%grid%nx, par%i, par%n, x1, x2)
-    call map_mesh2grid_2D( region%mesh, refgeo%grid, region%ice%Hi_a, refgeo%Hi_grid(x1:x2,:)) 
-    call map_mesh2grid_2D( region%mesh, refgeo%grid, region%ice%Hb_a, refgeo%Hb_grid(x1:x2,:)) 
-    call map_mesh2grid_2D( region%mesh, refgeo%grid, region%ice%Hs_a, refgeo%Hs_grid(x1:x2,:)) 
+    call map_mesh2grid_2D( region%mesh, refgeo%grid, region%ice%dHi_a, refgeo%Hi_grid(x1:x2,:)) 
+    call map_mesh2grid_2D( region%mesh, refgeo%grid, region%ice%dHb_a, refgeo%Hb_grid(x1:x2,:)) 
+    call map_mesh2grid_2D( region%mesh, refgeo%grid, region%ice%dHs_a, refgeo%Hs_grid(x1:x2,:)) 
 
     call allgather_array(refgeo%Hi_grid)
     call allgather_array(refgeo%Hb_grid)
     call allgather_array(refgeo%Hs_grid)
 
     ! add the deltas to the original high resolution grid
-    refgeo_fine = region%refgeo_init
-    call map_square_to_square_cons_2nd_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hi_grid, refgeo_fine%Hi_grid)
-    call map_square_to_square_cons_2nd_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hb_grid, refgeo_fine%Hb_grid)
-    call map_square_to_square_cons_2nd_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hs_grid, refgeo_fine%Hs_grid)
+    refgeo%Hi_grid = refgeo%Hi_grid + region%refgeo_init%Hi_grid
+    refgeo%Hb_grid = refgeo%Hb_grid + region%refgeo_init%Hb_grid
+    refgeo%Hs_grid = refgeo%Hs_grid + region%refgeo_init%Hs_grid
 
-    call calc_reference_geometry_secondary_data( refgeo_fine%grid, refgeo_fine)
+    call calc_reference_geometry_secondary_data( refgeo%grid, refgeo)
 
     ! Pass it through
-    call create_mesh_from_cart_data( region , refgeo_fine, region%mesh_new)
+    call create_mesh_from_cart_data( region , refgeo, region%mesh_new)
 
     ! Clean up
     deallocate(refgeo%Hi_grid)
