@@ -25,6 +25,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          sudo apt-get update
           sudo apt-get install libopenmpi-dev libnetcdff-dev \
                                netcdf-bin makedepf90 petsc-dev
       
@@ -54,6 +55,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          sudo apt-get update
           sudo apt-get install libopenmpi-dev libnetcdff-dev \
                                netcdf-bin petsc-dev
 
@@ -77,6 +79,7 @@ jobs:
 
       - name: Dependencies
         run: |
+          sudo apt-get update
           sudo apt-get install libopenmpi-dev libnetcdff-dev \
                                netcdf-bin petsc-dev
           pip install gcovr --upgrade
