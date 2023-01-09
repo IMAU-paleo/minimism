@@ -37,7 +37,7 @@ jobs:
 
       - uses: actions/cache@v3
         with:
-          path: src/UFEMISM_program
+          path: src/minimism_program
           key: ${{ github.sha }}-binary
 
   test:
@@ -51,7 +51,7 @@ jobs:
 
       - uses: actions/cache@v3
         with:
-          path: src/UFEMISM_program
+          path: src/minimism_program
           key: ${{ github.sha }}-binary
 
       - name: Install dependencies
@@ -63,4 +63,4 @@ jobs:
       - name: Run EISMINT 1
         run: |
           cd tests
-          mpirun -n 2 ../src/UFEMISM_program eismint_1.cfg
+          mpirun -n 2 ../src/minimism_program eismint_1.cfg
