@@ -154,6 +154,7 @@ MODULE mesh_creation_module
     CHARACTER(LEN=256), PARAMETER                 :: routine_name = 'update_mesh'
     INTEGER                                       :: x1, x2
     type(type_reference_geometry)                 :: refgeo
+    ! type(type_reference_geometry)                 :: refgeo_fine
 
     ! Add routine to path
     CALL init_routine( routine_name)
@@ -183,6 +184,10 @@ MODULE mesh_creation_module
     call allgather_array(refgeo%Hi_grid)
     call allgather_array(refgeo%Hb_grid)
     call allgather_array(refgeo%Hs_grid)
+    
+    ! call map_square_to_square_cons_2nd_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hi_grid, refgeo_fine%Hi_grid)
+    ! call map_square_to_square_cons_2nd_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hb_grid, refgeo_fine%Hb_grid)
+    ! call map_square_to_square_cons_2nd_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hs_grid, refgeo_fine%Hs_grid)
 
     ! add the deltas to the original high resolution grid
     refgeo%Hi_grid = refgeo%Hi_grid + region%refgeo_init%Hi_grid
