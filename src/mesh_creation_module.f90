@@ -161,6 +161,11 @@ MODULE mesh_creation_module
 
     refgeo = region%refgeo_init
 
+    ! call initialise_model_square_grid(region, refgeo%grid, C%dx_remesh_grid)
+    ! allocate(refgeo%Hi_grid(refgeo%grid%nx, refgeo%grid%ny))
+    ! allocate(refgeo%Hb_grid(refgeo%grid%nx, refgeo%grid%ny))
+    ! allocate(refgeo%Hs_grid(refgeo%grid%nx, refgeo%grid%ny))
+
     ! Screen meesage
     if (par%master) then
       if (C%do_time_display) then
@@ -185,9 +190,10 @@ MODULE mesh_creation_module
     call allgather_array(refgeo%Hb_grid)
     call allgather_array(refgeo%Hs_grid)
     
-    ! call map_square_to_square_cons_2nd_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hi_grid, refgeo_fine%Hi_grid)
-    ! call map_square_to_square_cons_2nd_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hb_grid, refgeo_fine%Hb_grid)
-    ! call map_square_to_square_cons_2nd_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hs_grid, refgeo_fine%Hs_grid)
+    !call map_square_to_square_cons_2nd_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hi_grid, refgeo_fine%Hi_grid)
+    !call map_square_to_square_cons_2nd_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hb_grid, refgeo_fine%Hb_grid)
+    !call map_square_to_square_cons_2nd_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hs_grid, refgeo_fine%Hs_grid)
+    ! refgeo = refgeo_fine
 
     ! add the deltas to the original high resolution grid
     refgeo%Hi_grid = refgeo%Hi_grid + region%refgeo_init%Hi_grid

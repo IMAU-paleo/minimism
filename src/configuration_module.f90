@@ -134,6 +134,7 @@ MODULE configuration_module
   REAL(dp)            :: res_max_mountain_config                     = 40._dp                           !                                 mountains             [km]
   REAL(dp)            :: res_max_coast_config                        = 40._dp                           !                                 coastline             [km]
   REAL(dp)            :: mesh_fitness_threshold_config               = 0.95_dp                          ! Minimum allowed mesh fitness (fraction of triangles that are not Bad) before mesh updating
+  real(dp)            :: dx_remesh_grid_config                       = 40000._dp                        ! Resolution of the grid to use for remeshing
 
   ! Resolutions of the different square grids
   ! =========================================
@@ -710,6 +711,7 @@ MODULE configuration_module
     REAL(dp)                            :: res_max_mountain
     REAL(dp)                            :: res_max_coast
     REAL(dp)                            :: mesh_fitness_threshold
+    REAL(dp)                            :: dx_remesh_grid
 
     ! Resolutions of the different square grids
     ! =========================================
@@ -1579,6 +1581,7 @@ CONTAINS
                      res_max_mountain_config,                         &
                      res_max_coast_config,                            &
                      mesh_fitness_threshold_config,                   &
+                     dx_remesh_grid_config,                           &
                      dx_grid_output_config,                           &
                      dx_grid_GIA_config,                              &
                      dx_grid_smooth_config,                           &
@@ -1871,6 +1874,7 @@ CONTAINS
     C%res_max_mountain                         = res_max_mountain_config
     C%res_max_coast                            = res_max_coast_config
     C%mesh_fitness_threshold                   = mesh_fitness_threshold_config
+    C%dx_remesh_grid                           = dx_remesh_grid_config
 
     ! The smallest allowed resolution
     C%res_min = MIN( MIN( MIN( MIN( C%res_max_margin, C%res_max_gl), C%res_max_cf), C%res_max_mountain), C%res_max_coast)
