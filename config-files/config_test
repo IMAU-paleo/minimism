@@ -49,9 +49,6 @@
     mesh_fitness_threshold_config               = 0.99                             ! Minimum allowed mesh fitness (fraction of triangles that are not Bad) before mesh updating
     dx_remesh_grid_config                       = 100000                           ! UNUSED: Resolution of grid used for remeshing (coarser = faster, and of course less accurate) [m]
 
-    ! Multiprocess
-    use_submesh_config                          = .FALSE.                          ! Use parallel submeshes to generate final mesh
-
   ! Restart
   ! =======
 
