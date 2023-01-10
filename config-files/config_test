@@ -47,7 +47,7 @@
     alpha_min_config                            = 0.55                             ! Minimum internal angle of triangles (0.4363 = 25 degrees)
     dz_max_ice_config                           = 20000.0                          ! Maximum allowed 2nd order surface deviation over ice
     mesh_fitness_threshold_config               = 0.99                             ! Minimum allowed mesh fitness (fraction of triangles that are not Bad) before mesh updating
-    dx_remesh_grid_config                       = 100000                           ! UNUSED: Resolution of grid used for remeshing (coarser = faster, and of course less accurate) [m]
+    dx_remesh_grid_config                       = 20000                           ! UNUSED: Resolution of grid used for remeshing (coarser = faster, and of course less accurate) [m]
 
   ! Restart
   ! =======
