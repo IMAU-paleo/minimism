@@ -367,7 +367,7 @@ contains
 
    END SUBROUTINE map_square_to_square_cons_2nd_order_2D
 
- ! == Map data between two square grids using 2nd-order conservative remapping
+ ! == Map data between two square grids using 1st-order conservative remapping
    SUBROUTINE map_square_to_square_cons_1st_order_2D( src, dst, d_src, d_dst)
      ! Map data from one square grid to another (e.g. PD ice thickness from the square grid in the input file to the model square grid)
      use data_types_module, only: type_grid
