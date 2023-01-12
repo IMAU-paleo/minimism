@@ -24,7 +24,7 @@ MODULE mesh_creation_module
   USE mesh_Delaunay_module,            ONLY: split_segment, split_triangle, move_vertex, flip_triangle_pairs
   USE mesh_operators_module,           ONLY: calc_matrix_operators_mesh
   USE mesh_ArakawaC_module,            ONLY: make_Ac_mesh
-  use utilities_module,                only: get_lat_lon_coordinates
+  use utilities_module,                only: get_lat_lon_coordinates, surface_elevation
 
   IMPLICIT NONE
 
@@ -152,58 +152,98 @@ MODULE mesh_creation_module
 
     ! Local variables:
     CHARACTER(LEN=256), PARAMETER                 :: routine_name = 'update_mesh'
-    INTEGER                                       :: x1, x2
+    INTEGER                                       :: x1, x2, i, j, vi
     type(type_reference_geometry)                 :: refgeo
     type(type_reference_geometry)                 :: refgeo_fine
     type(type_grid)                               :: coarse_grid
+    real(dp), dimension(:), allocatable           :: dHi
 
     ! Add routine to path
     CALL init_routine( routine_name)
 
+    ! Copy structure template from reference topography (for coarse grid)
     refgeo = region%refgeo_init
+    ! Initialise a coarse grid
     call initialise_model_square_grid(region, coarse_grid, C%dx_remesh_grid)
+    ! Assign that grid to the copy
     refgeo%grid = coarse_grid
 
+    ! Allocate new topo variables on the coarse grid
     deallocate(refgeo%Hi_grid, refgeo%Hb_grid, refgeo%Hs_grid)
     allocate(refgeo%Hi_grid(refgeo%grid%nx, refgeo%grid%ny))
     allocate(refgeo%Hb_grid(refgeo%grid%nx, refgeo%grid%ny))
     allocate(refgeo%Hs_grid(refgeo%grid%nx, refgeo%grid%ny))
 
+    ! Copy structure template from reference topograpgy (for fine grid)
     refgeo_fine = region%refgeo_init
 
     ! Screen meesage
-    if (par%master) then
-      if (C%do_time_display) then
-        if (mod(region%time-region%dt,C%dt_output) /= 0._dp) then
-          write(*,"(A)") ' - mesh time!    '
-        else
-          ! Output took care of advancing a newline.
-        end if
+    if (par%master .and. C%do_time_display) then
+      if (mod(region%time-region%dt,C%dt_output) /= 0._dp) then
+        ! Print some message as an excuse for a newline
+        write(*,"(A)") ' - mesh time!    '
+      else
+        ! Output message took care of advancing a newline.
       end if
       write(*,"(A)") '  Creating a new mesh for region ' &
                                    // TRIM(region%mesh%region_name) // '...'
     end if
 
-    !call calc_remapping_operator_mesh2grid( region%mesh, refgeo%grid)
+    ! Allocate local dHi so the original is not modified
+    allocate( dHi(region%mesh%vi1:region%mesh%vi2) )
+    dHi = 0._dp
 
+    ! If the model has removed all ice from a specific area, make sure that
+    ! all ice in that area of the fine grid is eventually removed as well.
+    ! This accounts for the possibility that the original delta is not able
+    ! to remove ice from all grid points, which would lead to many isolated
+    ! ice caps (and thus margins) that the new mesh will want to fill with
+    ! unnecessary vertices.
+
+    do vi = region%mesh%vi1, region%mesh%vi2
+      ! If ice sheet retreated at this mesh point
+      if (region%ice%Hi_a( vi) < C%minimum_ice_thickness) then
+        ! Make sure that you remove all ice from the grid later
+        dHi( vi) = -1e20_dp
+      else
+        dHi( vi) = region%ice%dHi_a( vi)
+      end if
+    end do
+
+    ! Map deltas from mesh to coarse grid
     call partition_list( refgeo%grid%nx, par%i, par%n, x1, x2)
-    call map_mesh2grid_2D( region%mesh, refgeo%grid, region%ice%dHi_a, refgeo%Hi_grid(x1:x2,:)) 
-    call map_mesh2grid_2D( region%mesh, refgeo%grid, region%ice%dHb_a, refgeo%Hb_grid(x1:x2,:)) 
-    call map_mesh2grid_2D( region%mesh, refgeo%grid, region%ice%dHs_a, refgeo%Hs_grid(x1:x2,:)) 
+    call map_mesh2grid_2D( region%mesh, refgeo%grid, dHi,              refgeo%Hi_grid(x1:x2,:))
+    call map_mesh2grid_2D( region%mesh, refgeo%grid, region%ice%dHb_a, refgeo%Hb_grid(x1:x2,:))
+    call map_mesh2grid_2D( region%mesh, refgeo%grid, region%ice%dHs_a, refgeo%Hs_grid(x1:x2,:))
 
     call allgather_array(refgeo%Hi_grid)
     call allgather_array(refgeo%Hb_grid)
     call allgather_array(refgeo%Hs_grid)
-    
+
+    ! Map deltas from coarse grid to fine grid
     call map_square_to_square_cons_1st_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hi_grid, refgeo_fine%Hi_grid)
     call map_square_to_square_cons_1st_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hb_grid, refgeo_fine%Hb_grid)
     call map_square_to_square_cons_1st_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hs_grid, refgeo_fine%Hs_grid)
+
+    ! Forget about the coarse grid now, and continue only with the fine grid
     refgeo = refgeo_fine
 
-    ! add the deltas to the original high resolution grid
-    refgeo%Hi_grid = refgeo%Hi_grid + region%refgeo_init%Hi_grid
-    refgeo%Hb_grid = refgeo%Hb_grid + region%refgeo_init%Hb_grid
-    refgeo%Hs_grid = refgeo%Hs_grid + region%refgeo_init%Hs_grid
+    call partition_list( refgeo%grid%nx, par%i, par%n, x1, x2)
+
+    do j = 1, refgeo%grid%ny
+    do i = x1, x2
+
+      ! add the deltas to the original high resolution grid
+      refgeo%Hi_grid( i,j) = MAX( 0._dp, region%refgeo_init%Hi_grid( i,j) + refgeo%Hi_grid( i,j))
+      refgeo%Hb_grid( i,j) = region%refgeo_init%Hb_grid( i,j) + refgeo%Hi_grid( i,j)
+      refgeo%Hs_grid( i,j) = surface_elevation( refgeo%Hi_grid( i,j), refgeo%Hb_grid( i,j), 0._dp)
+
+    end do
+    end do
+
+    call allgather_array(refgeo%Hi_grid)
+    call allgather_array(refgeo%Hb_grid)
+    call allgather_array(refgeo%Hs_grid)
 
     call calc_reference_geometry_secondary_data( refgeo%grid, refgeo)
 
