@@ -32,8 +32,8 @@ module ice_velocity_module
 
 contains
 
-! ===== Velocity solvers =====
-! ============================
+! ===== Ice dynamics approximations =====
+! =======================================
 
   ! === SIA ===
   ! ===========
@@ -57,19 +57,30 @@ contains
     real(dp), parameter                   :: D_uv_3D_cutoff = -1E5_dp
     real(dp), dimension(:,:), allocatable :: A_flow_3D_a
 
+    ! Initialisation
+    ! ==============
+
     ! Add routine to path
     call init_routine( routine_name)
 
-    ! Allocate memory
-    allocate( Hi_b    ( mesh%ti1:mesh%ti2), source=0._dp)
-    allocate( dHs_dx_b( mesh%ti1:mesh%ti2), source=0._dp)
-    allocate( dHs_dy_b( mesh%ti1:mesh%ti2), source=0._dp)
+    ! Allocate memory for ice thickness and surface slopes on the b-grid
+    allocate( Hi_b    ( mesh%ti1:mesh%ti2))
+    allocate( dHs_dx_b( mesh%ti1:mesh%ti2))
+    allocate( dHs_dy_b( mesh%ti1:mesh%ti2))
+    Hi_b = 0._dp
+    dHs_dx_b = 0._dp
+    dHs_dy_b = 0._dp
 
-    allocate( A_flow_3D_a( 1:mesh%nV, C%nz), source=0._dp)
+    ! Allocate and gather ice flow factor data from all processes
+    allocate( A_flow_3D_a( 1:mesh%nV, C%nz))
     A_flow_3D_a(mesh%vi1:mesh%vi2,:) = ice%A_flow_3D_a
     call allgather_array(A_flow_3D_a)
 
-    ! Get ice thickness, surface slopes, and ice flow factor on the b-grid
+    ! Initialise velocities to 0
+    ice%u_3D_SIA_b = 0._dp
+    ice%v_3D_SIA_b = 0._dp
+
+    ! Get ice thickness and surface slopes on the b-grid
     call map_a_to_b_2D( mesh, ice%Hi_a, Hi_b    )
     call ddx_a_to_b_2D( mesh, ice%Hs_a, dHs_dx_b)
     call ddy_a_to_b_2D( mesh, ice%Hs_a, dHs_dy_b)
@@ -77,23 +88,22 @@ contains
     ! Calculate 3D horizontal velocities on the b-grid
     do ti = mesh%ti1, mesh%ti2
 
+      ! Get vertex indices for this triangle
       via = mesh%Tri( ti,1)
       vib = mesh%Tri( ti,2)
       vic = mesh%Tri( ti,3)
 
-      if (ice%mask_sheet_a( via) == 0 .and. &
-          ice%mask_sheet_a( vib) == 0 .and. &
-          ice%mask_sheet_a( vic) == 0) then
-         ! No ice at any of the three triangle corners; set velocity to zero
+      ! Check that at least one triangle vertex has ice on it
+      if (ice%mask_sheet_a( via) == 1 .or. &
+          ice%mask_sheet_a( vib) == 1 .or. &
+          ice%mask_sheet_a( vic) == 1) then
 
-        ice%u_3D_SIA_b( ti,:) = 0._dp
-        ice%v_3D_SIA_b( ti,:) = 0._dp
-
-      else
-
-        ! Calculate staggered ice flow factor
+        ! Initialise counter
         w           = 0._dp
+        ! Initialise ice flow factor on the b-grid
         A_flow_3D_b = 0._dp
+
+        ! Calculate averaged ice flow factor on the b-grid
         if (ice%mask_sheet_a( via) == 1) then
           w           = w           + 1._dp
           A_flow_3D_b = A_flow_3D_b + A_flow_3D_a( via,:)
@@ -108,12 +118,14 @@ contains
         end if
         A_flow_3D_b = A_flow_3D_b / w
 
+        ! Compute depth-dependent ice diffusivity (Doc. Eq. 1)
         D_0           = (ice_density * grav * Hi_b( ti))**C%n_flow * ((dHs_dx_b( ti)**2 + dHs_dy_b( ti)**2))**((C%n_flow - 1._dp) / 2._dp)
         D_prof        = A_flow_3D_b * C%zeta**C%n_flow
         call vertical_integration_from_bottom_to_zeta( D_prof, D_deformation)
         D_deformation = 2._dp * Hi_b( ti) * D_deformation
         D_SIA_3D      = MAX( D_0 * D_deformation, D_uv_3D_cutoff)
 
+        ! Compute SIA velocities (Doc. Eq. 2 and 3)
         ice%u_3D_SIA_b( ti,:) = D_SIA_3D * dHs_dx_b( ti)
         ice%v_3D_SIA_b( ti,:) = D_SIA_3D * dHs_dy_b( ti)
 
@@ -283,7 +295,7 @@ contains
     ! Finalise routine path
     call finalise_routine( routine_name)
 
-  END SUBROUTINE solve_SSA
+  end subroutine solve_SSA
 
   ! === DIVA ===
   ! ============
@@ -410,6 +422,9 @@ contains
     call finalise_routine( routine_name)
 
   end subroutine solve_DIVA
+
+! ===== Rest =====
+! ================
 
   ! Calculate "secondary" velocities (surface, basal, vertically averaged, on the A-mesh, etc.)
 
@@ -2628,31 +2643,31 @@ contains
     ! == Reallocate everything else
     ! =============================
 
-    CALL reallocate_bounds( ice%u_3D_a     ,   mesh_new%vi1, mesh_new%vi2, C%nz ) 
+    CALL reallocate_bounds( ice%u_3D_a     ,   mesh_new%vi1, mesh_new%vi2, C%nz )
     CALL reallocate_bounds( ice%v_3D_a     ,   mesh_new%vi1, mesh_new%vi2, C%nz )
     CALL reallocate_bounds( ice%u_3D_b     ,   mesh_new%ti1, mesh_new%ti2, C%nz )
     CALL reallocate_bounds( ice%v_3D_b     ,   mesh_new%ti1, mesh_new%ti2, C%nz )
     CALL reallocate_bounds( ice%w_3D_a     ,   mesh_new%vi1, mesh_new%vi2, C%nz )
 
-    CALL reallocate_bounds( ice%u_vav_a    ,   mesh_new%vi1, mesh_new%vi2       )  
-    CALL reallocate_bounds( ice%v_vav_a    ,   mesh_new%vi1, mesh_new%vi2       )  
+    CALL reallocate_bounds( ice%u_vav_a    ,   mesh_new%vi1, mesh_new%vi2       )
+    CALL reallocate_bounds( ice%v_vav_a    ,   mesh_new%vi1, mesh_new%vi2       )
     CALL reallocate_bounds( ice%u_vav_b    ,   mesh_new%ti1, mesh_new%ti2       )
     CALL reallocate_bounds( ice%v_vav_b    ,   mesh_new%ti1, mesh_new%ti2       )
-    CALL reallocate_bounds( ice%uabs_vav_a ,   mesh_new%vi1, mesh_new%vi2       )  
+    CALL reallocate_bounds( ice%uabs_vav_a ,   mesh_new%vi1, mesh_new%vi2       )
     CALL reallocate_bounds( ice%uabs_vav_b ,   mesh_new%ti1, mesh_new%ti2       )
 
-    CALL reallocate_bounds( ice%u_surf_a   ,   mesh_new%vi1, mesh_new%vi2       )  
-    CALL reallocate_bounds( ice%v_surf_a   ,   mesh_new%vi1, mesh_new%vi2       )  
+    CALL reallocate_bounds( ice%u_surf_a   ,   mesh_new%vi1, mesh_new%vi2       )
+    CALL reallocate_bounds( ice%v_surf_a   ,   mesh_new%vi1, mesh_new%vi2       )
     CALL reallocate_bounds( ice%u_surf_b   ,   mesh_new%ti1, mesh_new%ti2       )
     CALL reallocate_bounds( ice%v_surf_b   ,   mesh_new%ti1, mesh_new%ti2       )
-    CALL reallocate_bounds( ice%uabs_surf_a,   mesh_new%vi1, mesh_new%vi2       )  
+    CALL reallocate_bounds( ice%uabs_surf_a,   mesh_new%vi1, mesh_new%vi2       )
     CALL reallocate_bounds( ice%uabs_surf_b,   mesh_new%ti1, mesh_new%ti2       )
 
-    CALL reallocate_bounds( ice%u_base_a   ,   mesh_new%vi1, mesh_new%vi2       )  
-    CALL reallocate_bounds( ice%v_base_a   ,   mesh_new%vi1, mesh_new%vi2       )  
+    CALL reallocate_bounds( ice%u_base_a   ,   mesh_new%vi1, mesh_new%vi2       )
+    CALL reallocate_bounds( ice%v_base_a   ,   mesh_new%vi1, mesh_new%vi2       )
     CALL reallocate_bounds( ice%u_base_b   ,   mesh_new%ti1, mesh_new%ti2       )
     CALL reallocate_bounds( ice%v_base_b   ,   mesh_new%ti1, mesh_new%ti2       )
-    CALL reallocate_bounds( ice%uabs_base_a,   mesh_new%vi1, mesh_new%vi2       )  
+    CALL reallocate_bounds( ice%uabs_base_a,   mesh_new%vi1, mesh_new%vi2       )
     CALL reallocate_bounds( ice%uabs_base_b,   mesh_new%ti1, mesh_new%ti2       )
 
     ! CALL reallocate_shared_dp_2D(   mesh_new%nTri, C%nz           , ice%u_3D_SIA_b            , ice%wu_3D_SIA_b           )

@@ -5,7 +5,7 @@
 
     ! General
     start_time_of_run_config                    = 0.0                              ! Start time (in years) of the simulations
-    end_time_of_run_config                      = 1000.0                           ! End   time (in years) of the simulations
+    end_time_of_run_config                      = 500.0                            ! End   time (in years) of the simulations
     dt_mesh_min_config                          = 100                              ! Minimum amount of time (in years) between mesh updates
     dt_coupling_config                          = 100                              ! Interval of coupling (in years) between the four ice-sheets
 
