@@ -259,8 +259,8 @@ MODULE mesh_creation_module
     call create_mesh_from_cart_data( region, refgeo_fine, region%mesh_new)
 
     ! Clean up
-    deallocate(dHi_grid_coarse, dHb_grid_coarse, dHs_grid_coarse)
-    deallocate(dHi_grid_fine, dHb_grid_fine, dHs_grid_fine)
+    deallocate(dHi_grid_coarse, dHb_grid_coarse, dHs_grid_coarse, SL_grid_coarse)
+    deallocate(dHi_grid_fine, dHb_grid_fine, dHs_grid_fine, SL_grid_fine)
     deallocate(dHi)
 
     ! Finalise routine path
