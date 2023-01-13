@@ -627,7 +627,7 @@ MODULE mesh_help_functions_module
   END SUBROUTINE find_shared_Voronoi_boundary
 
 ! == Some basic geometrical operations
-  FUNCTION   is_in_triangle( pa, pb, pc, p) RESULT(isso)
+  pure FUNCTION   is_in_triangle( pa, pb, pc, p) RESULT(isso)
     ! Check if the point p lies inside the triangle abc, or within distance tol_dist of its edges
 
     IMPLICIT NONE
@@ -653,7 +653,7 @@ MODULE mesh_help_functions_module
     END IF
 
   END FUNCTION is_in_triangle
-  FUNCTION   is_boundary_segment( mesh, v1, v2) RESULT(isso)
+  pure FUNCTION   is_boundary_segment( mesh, v1, v2) RESULT(isso)
    ! Determine whether or not the line between two vertices is an Edge segment
 
     IMPLICIT NONE
@@ -728,7 +728,7 @@ MODULE mesh_help_functions_module
    END IF
 
   END FUNCTION is_boundary_segment
-  SUBROUTINE is_encroached_upon( mesh, v1, v2, isso)
+  pure SUBROUTINE is_encroached_upon( mesh, v1, v2, isso)
     ! TRUE if the line between v1 and v2 is encroached upon by any other
     ! vertex
 
@@ -803,7 +803,7 @@ MODULE mesh_help_functions_module
       END IF
     END DO ! DO ti = 1, mesh%nTri
   END SUBROUTINE encroaches_upon
-  FUNCTION is_walltowall( mesh, ti) RESULT(isso)
+  pure FUNCTION is_walltowall( mesh, ti) RESULT(isso)
    ! Determine whether or not a triangle is "wall to wall"
    ! (i.e. contains vertices lying on opposite domain boundaries)
 
@@ -1600,8 +1600,7 @@ MODULE mesh_help_functions_module
 
     ! If p lies outside the mesh domain, throw an error
     IF (p(1) < mesh%xmin .OR. p(1) > mesh%xmax .OR. p(2) < mesh%ymin .OR. p(2) > mesh%ymax) THEN
-      WRITE(0,*) 'find_containing_triangle - ERROR: point lies outside mesh domain!'
-      STOP
+      error stop 'find_containing_triangle - ERROR: point lies outside mesh domain!'
     END IF
 
     ! See if the initial guess is correct.
@@ -1765,7 +1764,7 @@ MODULE mesh_help_functions_module
     STOP
 
   END SUBROUTINE find_containing_vertex
-  FUNCTION is_in_Voronoi_cell( mesh, p, vi) RESULT(isso)
+  pure FUNCTION is_in_Voronoi_cell( mesh, p, vi) RESULT(isso)
     ! If the point p lies closer to vertex vi than to any other vertex, then
     ! by definition it lies inside the Voronoi cell of vertex vi.
 
@@ -2079,7 +2078,7 @@ MODULE mesh_help_functions_module
     DEALLOCATE(Vor)
 
   END SUBROUTINE mean_cart_over_Voronoi_cell_int
-  SUBROUTINE sum_cart_over_triangle_dp(  p1, p2, p3, d, x, y, nx, ny, trisumel, trinel)
+  pure SUBROUTINE sum_cart_over_triangle_dp(  p1, p2, p3, d, x, y, nx, ny, trisumel, trinel)
     ! Find the lowest value v that a data field d on
     ! cartesian grid x,y assumes within the triangle [p1,p2,p3]
     ! If trinel==0, there is no cartesian gridpoint inside the triangle,
@@ -2155,7 +2154,7 @@ MODULE mesh_help_functions_module
     END DO
 
   END SUBROUTINE sum_cart_over_triangle_int
-  SUBROUTINE max_cart_over_triangle_dp(  p1, p2, p3, d, x, y, nx, ny, vmax, trinel)
+  pure SUBROUTINE max_cart_over_triangle_dp(  p1, p2, p3, d, x, y, nx, ny, vmax, trinel)
     ! Find the lowest value v that a data field d on
     ! cartesian grid x,y assumes within the triangle [p1,p2,p3]
     ! If trinel==0, there is no cartesian gridpoint inside the triangle,
@@ -2195,7 +2194,7 @@ MODULE mesh_help_functions_module
     END DO
 
   END SUBROUTINE max_cart_over_triangle_dp
-  SUBROUTINE max_cart_over_triangle_int( p1, p2, p3, d, x, y, nx, ny, vmax, trinel)
+  pure SUBROUTINE max_cart_over_triangle_int( p1, p2, p3, d, x, y, nx, ny, vmax, trinel)
     ! Find the lowest value v that a data field d on
     ! cartesian grid x,y assumes within the triangle [p1,p2,p3]
     ! If trinel==0, there is no cartesian gridpoint inside the triangle,
@@ -2275,7 +2274,7 @@ MODULE mesh_help_functions_module
     END DO
 
   END SUBROUTINE min_cart_over_triangle_dp
-  SUBROUTINE min_cart_over_triangle_int( p1, p2, p3, d, x, y, nx, ny, vmin, trinel)
+  pure SUBROUTINE min_cart_over_triangle_int( p1, p2, p3, d, x, y, nx, ny, vmin, trinel)
     ! Find the lowest value v that a data field d on
     ! cartesian grid x,y assumes within the triangle [p1,p2,p3]
     ! If trinel==0, there is no cartesian gridpoint inside the triangle,
@@ -2315,7 +2314,7 @@ MODULE mesh_help_functions_module
     END DO
 
   END SUBROUTINE min_cart_over_triangle_int
-  SUBROUTINE cart_bilinear_dp(  d, x, y, nx, ny, p, v)
+  pure SUBROUTINE cart_bilinear_dp(  d, x, y, nx, ny, p, v)
     ! Bicubic interpolation of Cartesian data
     ! Interpolates the data field d of size nx,ny, given on grid x,y,
     ! at the point p, resulting in value v
@@ -2353,7 +2352,7 @@ MODULE mesh_help_functions_module
          (wiu * wju * d(iu,ju))
 
   END SUBROUTINE cart_bilinear_dp
-  SUBROUTINE cart_bilinear_int( d, x, y, nx, ny, p, v)
+  pure SUBROUTINE cart_bilinear_int( d, x, y, nx, ny, p, v)
     ! Bicubic interpolation of Cartesian data
     ! Interpolates the data field d of size nx,ny, given on grid x,y,
     ! at the point p, resulting in value v

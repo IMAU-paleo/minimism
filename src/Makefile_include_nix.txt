@@ -1,0 +1,34 @@
+# Depends on this file
+$(OBJ_PATH)/%.o : %.f90 Makefile_include_local.txt
+
+# Compiler names:
+  F90 = mpifort
+
+# Setting the path for the netcdf libraries:  
+  NCLIB     = $(shell pkg-config netcdf-fortran --libs)
+  NCINC     = $(shell pkg-config netcdf-fortran --cflags)
+  PETSCINC  = $(shell pkg-config petsc --cflags )
+  PETSCLIB  = $(shell pkg-config petsc --libs )
+  LAPACKLIB  = $(shell pkg-config lapack --libs )
+
+
+# Compiler flags:
+  COMPILER_FLAGS_BASIC    = -O3 -Wall -ffree-line-length-none -cpp \
+                            -Werror=implicit-interface -fimplicit-none -g -march=native
+
+# check=all : bounds checking etc ...
+# backtrace : print backtrace on checking fail
+# Og        : compile with only optimizations compatible with gdb enabled
+# init-real=nan : initialize every real allocation to nan, follow the nans to find uninitialized values
+# init-integer=-42 : same, but for integers
+# init-character=33 : same, but for characters, 33 is equal to "!" (so look for those)
+  COMPILER_FLAGS_CHECK    = -fcheck=all -fbacktrace -Og \
+                            -finit-real=nan -finit-integer=-42 -finit-character=33 \
+                            -ffpe-trap=invalid,zero,overflow
+
+  F90FLAGS                = ${COMPILER_FLAGS_BASIC} \
+                            ${COMPILER_FLAGS_CHECK} \
+                            ${NCINC} ${PETSCINC}
+
+# Linking flags of libaries:
+  LDFLAGS                 = ${PETSCLIB} ${NCLIB} ${LAPACKLIB} -g

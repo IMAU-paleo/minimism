@@ -572,15 +572,25 @@ contains
     call init_routine( routine_name)
 
     ! Allocate shared memory
+    if (allocated(refgeo%surf_curv)) deallocate(refgeo%surf_curv)
     allocate( refgeo%surf_curv  ( grid%nx, grid%ny), source=0.0_dp)
+    if (allocated(refgeo%mask_land)) deallocate(refgeo%mask_land)
     allocate( refgeo%mask_land  ( grid%nx, grid%ny), source=0)
+    if (allocated(refgeo%mask_ocean)) deallocate(refgeo%mask_ocean)
     allocate( refgeo%mask_ocean ( grid%nx, grid%ny), source=0)
+    if (allocated(refgeo%mask_ice)) deallocate(refgeo%mask_ice)
     allocate( refgeo%mask_ice   ( grid%nx, grid%ny), source=0)
+    if (allocated(refgeo%mask_sheet)) deallocate(refgeo%mask_sheet)
     allocate( refgeo%mask_sheet ( grid%nx, grid%ny), source=0)
+    if (allocated(refgeo%mask_shelf)) deallocate(refgeo%mask_shelf)
     allocate( refgeo%mask_shelf ( grid%nx, grid%ny), source=0)
+    if (allocated(refgeo%mask_margin)) deallocate(refgeo%mask_margin)
     allocate( refgeo%mask_margin( grid%nx, grid%ny), source=0)
+    if (allocated(refgeo%mask_gl)) deallocate(refgeo%mask_gl)
     allocate( refgeo%mask_gl    ( grid%nx, grid%ny), source=0)
+    if (allocated(refgeo%mask_cf)) deallocate(refgeo%mask_cf)
     allocate( refgeo%mask_cf    ( grid%nx, grid%ny), source=0)
+    if (allocated(refgeo%mask_coast)) deallocate(refgeo%mask_coast)
     allocate( refgeo%mask_coast ( grid%nx, grid%ny), source=0)
 
     ! Calculate surface curvature

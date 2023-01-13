@@ -796,7 +796,7 @@ contains
       dist = norm2( mesh%V( vi,:) - mesh%V( vj,:))
       uv_c = (abs( u_c( aci)) + abs( v_c( aci)))
 
-      if (uv_c > 0._dp) then
+      if (uv_c > 1e-10_dp) then
         dt = dist / uv_c
       else
         dt = 2._dp * C%dt_max
