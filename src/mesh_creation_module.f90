@@ -156,8 +156,8 @@ MODULE mesh_creation_module
     type(type_reference_geometry)                 :: refgeo_fine
     type(type_grid)                               :: coarse_grid
     real(dp), dimension(:), allocatable           :: dHi
-    real(dp), dimension(:,:), allocatable         :: dHi_grid_coarse, dHb_grid_coarse, dHs_grid_coarse
-    real(dp), dimension(:,:), allocatable         :: dHi_grid_fine, dHb_grid_fine, dHs_grid_fine
+    real(dp), dimension(:,:), allocatable         :: dHi_grid_coarse, dHb_grid_coarse, dHs_grid_coarse, SL_grid_coarse
+    real(dp), dimension(:,:), allocatable         :: dHi_grid_fine, dHb_grid_fine, dHs_grid_fine, SL_grid_fine
 
     ! Add routine to path
     CALL init_routine( routine_name)
@@ -185,11 +185,13 @@ MODULE mesh_creation_module
     allocate(dHi_grid_coarse(coarse_grid%nx, coarse_grid%ny))
     allocate(dHb_grid_coarse(coarse_grid%nx, coarse_grid%ny))
     allocate(dHs_grid_coarse(coarse_grid%nx, coarse_grid%ny))
+    allocate(SL_grid_coarse(coarse_grid%nx, coarse_grid%ny))
 
     ! Allocate new topo variables on the fine grid
     allocate(dHi_grid_fine(nx_fine, ny_fine))
     allocate(dHb_grid_fine(nx_fine, ny_fine))
     allocate(dHs_grid_fine(nx_fine, ny_fine))
+    allocate(SL_grid_fine(nx_fine, ny_fine))
 
     ! Allocate local dHi so the original is not modified
     allocate( dHi(region%mesh%vi1:region%mesh%vi2) )
@@ -217,15 +219,18 @@ MODULE mesh_creation_module
     call map_mesh2grid_2D( region%mesh, coarse_grid, dHi,              dHi_grid_coarse(x1:x2,:))
     call map_mesh2grid_2D( region%mesh, coarse_grid, region%ice%dHb_a, dHb_grid_coarse(x1:x2,:))
     call map_mesh2grid_2D( region%mesh, coarse_grid, region%ice%dHs_a, dHs_grid_coarse(x1:x2,:))
+    call map_mesh2grid_2D( region%mesh, coarse_grid, region%ice%SL_a,  SL_grid_coarse(x1:x2,:))
 
     call allgather_array(dHi_grid_coarse)
     call allgather_array(dHb_grid_coarse)
     call allgather_array(dHs_grid_coarse)
+    call allgather_array(SL_grid_coarse)
 
     ! Map deltas from coarse grid to fine grid
     call map_square_to_square_cons_1st_order_2D(coarse_grid, region%refgeo_init%grid, dHi_grid_coarse, dHi_grid_fine)
     call map_square_to_square_cons_1st_order_2D(coarse_grid, region%refgeo_init%grid, dHb_grid_coarse, dHb_grid_fine)
     call map_square_to_square_cons_1st_order_2D(coarse_grid, region%refgeo_init%grid, dHs_grid_coarse, dHs_grid_fine)
+    call map_square_to_square_cons_1st_order_2D(coarse_grid, region%refgeo_init%grid, SL_grid_coarse, SL_grid_fine)
 
     call partition_list( nx_fine, par%i, par%n, x1, x2)
 
@@ -238,7 +243,7 @@ MODULE mesh_creation_module
       ! add the deltas to the original high resolution grid
       refgeo_fine%Hi_grid( i,j) = MAX( 0._dp, region%refgeo_init%Hi_grid( i,j) + dHi_grid_fine( i,j))
       refgeo_fine%Hb_grid( i,j) = region%refgeo_init%Hb_grid( i,j) + dHb_grid_fine( i,j)
-      refgeo_fine%Hs_grid( i,j) = surface_elevation( dHi_grid_fine( i,j), dHb_grid_fine( i,j), 0._dp)
+      refgeo_fine%Hs_grid( i,j) = surface_elevation( dHi_grid_fine( i,j), dHb_grid_fine( i,j), SL_grid_fine( i,j))
 
     end do
     end do
@@ -251,7 +256,7 @@ MODULE mesh_creation_module
     call calc_reference_geometry_secondary_data( refgeo_fine%grid, refgeo_fine)
 
     ! Pass it through
-    call create_mesh_from_cart_data( region , refgeo_fine, region%mesh_new)
+    call create_mesh_from_cart_data( region, refgeo_fine, region%mesh_new)
 
     ! Clean up
     deallocate(dHi_grid_coarse, dHb_grid_coarse, dHs_grid_coarse)
