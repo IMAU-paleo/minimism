@@ -237,7 +237,7 @@ MODULE mesh_creation_module
 
       ! add the deltas to the original high resolution grid
       refgeo_fine%Hi_grid( i,j) = MAX( 0._dp, region%refgeo_init%Hi_grid( i,j) + dHi_grid_fine( i,j))
-      refgeo_fine%Hb_grid( i,j) = region%refgeo_init%Hb_grid( i,j) + dHi_grid_fine( i,j)
+      refgeo_fine%Hb_grid( i,j) = region%refgeo_init%Hb_grid( i,j) + dHb_grid_fine( i,j)
       refgeo_fine%Hs_grid( i,j) = surface_elevation( dHi_grid_fine( i,j), dHb_grid_fine( i,j), 0._dp)
 
     end do
