@@ -152,32 +152,17 @@ MODULE mesh_creation_module
 
     ! Local variables:
     CHARACTER(LEN=256), PARAMETER                 :: routine_name = 'update_mesh'
-    INTEGER                                       :: x1, x2, i, j, vi
-    type(type_reference_geometry)                 :: refgeo
+    INTEGER                                       :: x1, x2, i, j, vi, nx_fine, ny_fine
     type(type_reference_geometry)                 :: refgeo_fine
     type(type_grid)                               :: coarse_grid
     real(dp), dimension(:), allocatable           :: dHi
+    real(dp), dimension(:,:), allocatable         :: dHi_grid_coarse, dHb_grid_coarse, dHs_grid_coarse
+    real(dp), dimension(:,:), allocatable         :: dHi_grid_fine, dHb_grid_fine, dHs_grid_fine
 
     ! Add routine to path
     CALL init_routine( routine_name)
 
-    ! Copy structure template from reference topography (for coarse grid)
-    refgeo = region%refgeo_init
-    ! Initialise a coarse grid
-    call initialise_model_square_grid(region, coarse_grid, C%dx_remesh_grid)
-    ! Assign that grid to the copy
-    refgeo%grid = coarse_grid
-
-    ! Allocate new topo variables on the coarse grid
-    deallocate(refgeo%Hi_grid, refgeo%Hb_grid, refgeo%Hs_grid)
-    allocate(refgeo%Hi_grid(refgeo%grid%nx, refgeo%grid%ny))
-    allocate(refgeo%Hb_grid(refgeo%grid%nx, refgeo%grid%ny))
-    allocate(refgeo%Hs_grid(refgeo%grid%nx, refgeo%grid%ny))
-
-    ! Copy structure template from reference topograpgy (for fine grid)
-    refgeo_fine = region%refgeo_init
-
-    ! Screen meesage
+    ! Screen message
     if (par%master .and. C%do_time_display) then
       if (mod(region%time-region%dt,C%dt_output) /= 0._dp) then
         ! Print some message as an excuse for a newline
@@ -188,6 +173,23 @@ MODULE mesh_creation_module
       write(*,"(A)") '  Creating a new mesh for region ' &
                                    // TRIM(region%mesh%region_name) // '...'
     end if
+
+    ! shortcut for fine dimensions
+    nx_fine = region%refgeo_init%grid%nx
+    ny_fine = region%refgeo_init%grid%ny
+
+    ! Initialise a coarse grid
+    call initialise_model_square_grid(region, coarse_grid, C%dx_remesh_grid)
+
+    ! Allocate new topo variables on the coarse grid
+    allocate(dHi_grid_coarse(coarse_grid%nx, coarse_grid%ny))
+    allocate(dHb_grid_coarse(coarse_grid%nx, coarse_grid%ny))
+    allocate(dHs_grid_coarse(coarse_grid%nx, coarse_grid%ny))
+
+    ! Allocate new topo variables on the fine grid
+    allocate(dHi_grid_fine(nx_fine, ny_fine))
+    allocate(dHb_grid_fine(nx_fine, ny_fine))
+    allocate(dHs_grid_fine(nx_fine, ny_fine))
 
     ! Allocate local dHi so the original is not modified
     allocate( dHi(region%mesh%vi1:region%mesh%vi2) )
@@ -211,49 +213,50 @@ MODULE mesh_creation_module
     end do
 
     ! Map deltas from mesh to coarse grid
-    call partition_list( refgeo%grid%nx, par%i, par%n, x1, x2)
-    call map_mesh2grid_2D( region%mesh, refgeo%grid, dHi,              refgeo%Hi_grid(x1:x2,:))
-    call map_mesh2grid_2D( region%mesh, refgeo%grid, region%ice%dHb_a, refgeo%Hb_grid(x1:x2,:))
-    call map_mesh2grid_2D( region%mesh, refgeo%grid, region%ice%dHs_a, refgeo%Hs_grid(x1:x2,:))
+    call partition_list( coarse_grid%nx, par%i, par%n, x1, x2)
+    call map_mesh2grid_2D( region%mesh, coarse_grid, dHi,              dHi_grid_coarse(x1:x2,:))
+    call map_mesh2grid_2D( region%mesh, coarse_grid, region%ice%dHb_a, dHb_grid_coarse(x1:x2,:))
+    call map_mesh2grid_2D( region%mesh, coarse_grid, region%ice%dHs_a, dHs_grid_coarse(x1:x2,:))
 
-    call allgather_array(refgeo%Hi_grid)
-    call allgather_array(refgeo%Hb_grid)
-    call allgather_array(refgeo%Hs_grid)
+    call allgather_array(dHi_grid_coarse)
+    call allgather_array(dHb_grid_coarse)
+    call allgather_array(dHs_grid_coarse)
 
     ! Map deltas from coarse grid to fine grid
-    call map_square_to_square_cons_1st_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hi_grid, refgeo_fine%Hi_grid)
-    call map_square_to_square_cons_1st_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hb_grid, refgeo_fine%Hb_grid)
-    call map_square_to_square_cons_1st_order_2D(refgeo%grid, refgeo_fine%grid, refgeo%Hs_grid, refgeo_fine%Hs_grid)
+    call map_square_to_square_cons_1st_order_2D(coarse_grid, region%refgeo_init%grid, dHi_grid_coarse, dHi_grid_fine)
+    call map_square_to_square_cons_1st_order_2D(coarse_grid, region%refgeo_init%grid, dHb_grid_coarse, dHb_grid_fine)
+    call map_square_to_square_cons_1st_order_2D(coarse_grid, region%refgeo_init%grid, dHs_grid_coarse, dHs_grid_fine)
 
-    ! Forget about the coarse grid now, and continue only with the fine grid
-    refgeo = refgeo_fine
+    call partition_list( nx_fine, par%i, par%n, x1, x2)
 
-    call partition_list( refgeo%grid%nx, par%i, par%n, x1, x2)
+    ! Copy structure template from reference topograpgy (for fine grid)
+    refgeo_fine = region%refgeo_init
 
-    do j = 1, refgeo%grid%ny
+    do j = 1, ny_fine
     do i = x1, x2
 
       ! add the deltas to the original high resolution grid
-      refgeo%Hi_grid( i,j) = MAX( 0._dp, region%refgeo_init%Hi_grid( i,j) + refgeo%Hi_grid( i,j))
-      refgeo%Hb_grid( i,j) = region%refgeo_init%Hb_grid( i,j) + refgeo%Hi_grid( i,j)
-      refgeo%Hs_grid( i,j) = surface_elevation( refgeo%Hi_grid( i,j), refgeo%Hb_grid( i,j), 0._dp)
+      refgeo_fine%Hi_grid( i,j) = MAX( 0._dp, region%refgeo_init%Hi_grid( i,j) + dHi_grid_fine( i,j))
+      refgeo_fine%Hb_grid( i,j) = region%refgeo_init%Hb_grid( i,j) + dHi_grid_fine( i,j)
+      refgeo_fine%Hs_grid( i,j) = surface_elevation( dHi_grid_fine( i,j), dHb_grid_fine( i,j), 0._dp)
 
     end do
     end do
 
-    call allgather_array(refgeo%Hi_grid)
-    call allgather_array(refgeo%Hb_grid)
-    call allgather_array(refgeo%Hs_grid)
+    call allgather_array(refgeo_fine%Hi_grid)
+    call allgather_array(refgeo_fine%Hb_grid)
+    call allgather_array(refgeo_fine%Hs_grid)
 
-    call calc_reference_geometry_secondary_data( refgeo%grid, refgeo)
+
+    call calc_reference_geometry_secondary_data( refgeo_fine%grid, refgeo_fine)
 
     ! Pass it through
-    call create_mesh_from_cart_data( region , refgeo, region%mesh_new)
+    call create_mesh_from_cart_data( region , refgeo_fine, region%mesh_new)
 
     ! Clean up
-    deallocate(refgeo%Hi_grid)
-    deallocate(refgeo%Hb_grid)
-    deallocate(refgeo%Hs_grid)
+    deallocate(dHi_grid_coarse, dHb_grid_coarse, dHs_grid_coarse)
+    deallocate(dHi_grid_fine, dHb_grid_fine, dHs_grid_fine)
+    deallocate(dHi)
 
     ! Finalise routine path
     CALL finalise_routine( routine_name)
