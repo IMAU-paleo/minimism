@@ -38,7 +38,7 @@ contains
   ! === SIA ===
   ! ===========
 
-  subroutine solve_SIA(  mesh, ice)
+  subroutine solve_SIA( mesh, ice)
     ! Calculate ice velocities using the SIA.
 
     implicit none
@@ -150,7 +150,7 @@ contains
   ! === SSA ===
   ! ===========
 
-  subroutine solve_SSA(  mesh, ice)
+  subroutine solve_SSA( mesh, ice)
     ! Calculate ice velocities using the SSA
 
     implicit none
@@ -161,15 +161,16 @@ contains
 
     ! Local variables:
     character(len=256), parameter       :: routine_name = 'solve_SSA'
-    integer                             :: ti
+    integer                             :: vi, ti
     logical                             :: set_velocities_to_zero
     logical                             :: has_converged
     integer                             :: viscosity_iteration_i
     real(dp)                            :: resid_UV
     real(dp)                            :: umax_analytical, tauc_analytical
+    real(dp)                            :: fg_exp_mod, fg_exp_mod_slop, fg_exp_mod_peak
 
-    ! === Initialisation ===
-    ! ======================
+    ! Initialisation
+    ! ==============
 
     ! Add routine to path
     call init_routine( routine_name)
@@ -199,36 +200,44 @@ contains
       return
     end if
 
-    ! === Driving stress ===
-    ! ======================
+    ! Driving stress
+    ! ==============
 
     ! Calculate the driving stresses taudx, taudy
     call calculate_driving_stress( mesh, ice)
 
-    ! === Basal friction ===
-    ! ======================
+    ! Basal hydrology and bed roughness
+    ! =================================
 
     ! Calculate the basal yield stress tau_c
     call calc_basal_conditions( mesh, ice)
 
+    ! Grounded fractions
+    ! ==================
+
     ! Determine sub-mesh grounded fractions for scaling the basal friction
     call determine_grounded_fractions( mesh, ice)
 
-    ! === Idealised case ===
-    ! ======================
+    ! Idealised case
+    ! ==============
 
     ! Find analytical solution for the SSA icestream experiment (used only to print numerical error to screen)
     call SSA_Schoof2006_analytical_solution( 0.001_dp, 2000._dp, ice%A_flow_vav_a( mesh%vi1), &
                                              0._dp, umax_analytical, tauc_analytical)
 
-    ! === Viscosity ===
-    ! =================
+    ! Viscosity iteration
+    ! ===================
 
-    ! The viscosity iteration
+    ! Initialise iteration counter
     viscosity_iteration_i = 0
-    has_converged         = .false.
 
+    ! Default convergence check flag
+    has_converged = .false.
+
+    ! Iterate until convergence
     do while (.not. has_converged)
+
+      ! Increase iteration counter
       viscosity_iteration_i = viscosity_iteration_i + 1
 
       ! Calculate the effective viscosity and the product term N = eta * H
@@ -240,7 +249,7 @@ contains
       ! Set beta_eff equal to beta; this turns the DIVA into the SSA
       ice%beta_eff_a( mesh%vi1:mesh%vi2) = ice%beta_a( mesh%vi1:mesh%vi2)
 
-      ! Map beta_eff from the a-grid to the cx/cy-grids
+      ! Map beta_eff from the a-grid to the b-grid
       call map_a_to_b_2D( mesh, ice%beta_eff_a, ice%beta_eff_b)
 
       ! Apply the sub-grid grounded fraction
@@ -264,28 +273,40 @@ contains
       ! Check if the viscosity iteration has converged
       call calc_visc_iter_UV_resid( mesh, ice%u_prev_b, ice%v_prev_b, ice%u_base_SSA_b, ice%v_base_SSA_b, resid_UV)
 
-      ! if (par%master) then
-      !   write(0,*) '    SSA - viscosity iteration ', viscosity_iteration_i, &
-      !              ': resid_UV = ', resid_UV, &
-      !              ', u = [', MINVAL(ice%u_base_SSA_b), &
-      !              ' - ', MAXVAL(ice%u_base_SSA_b), ']'
-      ! end if
-
-      ! if (par%master .and. &
-      !     C%choice_refgeo_init_ANT == 'idealised' .and. &
-      !     C%choice_refgeo_init_idealised == 'SSA_icestream') then
-      !   write(0,*) '    SSA - viscosity iteration ', viscosity_iteration_i, &
-      !              ': err = ', abs(1._dp - maxval(ice%u_base_SSA_b) / umax_analytical), &
-      !              ': resid_UV = ', resid_UV
-      ! end if
-
-      has_converged = .false.
-      if     (resid_UV < C%DIVA_visc_it_norm_dUV_tol) then
+      ! Check for convergence or too many iterations
+      if (resid_UV < C%DIVA_visc_it_norm_dUV_tol .or. &
+          viscosity_iteration_i >= C%DIVA_visc_it_nit) then
         has_converged = .true.
       endif
-      if (viscosity_iteration_i >= C%DIVA_visc_it_nit) then
-        has_converged = .true.
+
+      ! Message printing: idealised case
+      if (par%master .and. C%choice_refgeo_init_ANT == 'idealised' .and. C%choice_refgeo_init_idealised == 'SSA_icestream') then
+        ! Print message
+        write(0,*) '    SSA - viscosity iteration ', viscosity_iteration_i, &
+                   ': err = ', abs(1._dp - maxval(ice%u_base_SSA_b) / umax_analytical), &
+                   ': resid_UV = ', resid_UV
       end if
+
+      ! ! Give next message some space
+      ! if (par%master .and. C%do_time_display .and. viscosity_iteration_i == 2) then
+      !   print*, ''
+      !   print*, ''
+      ! end if
+
+      ! ! Message printing: realistic case
+      ! if (par%master .and. C%do_time_display .and. viscosity_iteration_i >= 2) then
+      !   ! Print message
+      !   write(*,"(A,I2,A,F6.4,A,F8.1,A,F8.1,2A,F8.1,A,F8.1,A)") &
+      !           '          SSA - visc_iter ', viscosity_iteration_i, &
+      !           ': resid_UV = ', resid_UV, &
+      !           ', u = [', minval(ice%u_base_SSA_b), ' - ', maxval(ice%u_base_SSA_b), ']', &
+      !           ', v = [', minval(ice%v_base_SSA_b), ' - ', maxval(ice%v_base_SSA_b), ']'
+      ! end if
+
+      ! ! Give next message some space
+      ! if (par%master .and. C%do_time_display .and. has_converged) then
+      !   print*, ''
+      ! end if
 
     end do
 
@@ -300,7 +321,7 @@ contains
   ! === DIVA ===
   ! ============
 
-  subroutine solve_DIVA(  mesh, ice)
+  subroutine solve_DIVA( mesh, ice)
     ! Calculate ice velocities using the DIVA
 
     implicit none
@@ -423,265 +444,26 @@ contains
 
   end subroutine solve_DIVA
 
-! ===== Rest =====
-! ================
+! ===== Stresses =====
+! ====================
 
-  ! Calculate "secondary" velocities (surface, basal, vertically averaged, on the A-mesh, etc.)
-
-  SUBROUTINE calc_secondary_velocities( mesh, ice)
-    ! Calculate "secondary" velocities (surface, basal, vertically averaged, on the A-mesh, etc.)
-
-    IMPLICIT NONE
-
-    ! In/output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    TYPE(type_ice_model),                INTENT(INOUT) :: ice
-
-    ! Local variables:
-    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'calc_secondary_velocities'
-    INTEGER                                            :: ti, vi, k
-    REAL(dp), DIMENSION(C%nz)                          :: prof
-
-    ! Add routine to path
-    CALL init_routine( routine_name)
-
-    IF (C%choice_ice_dynamics == 'SIA') THEN
-      ! No SSA or sliding, just the SIA
-
-      ! Set 3D velocity field equal to SIA answer
-      ice%u_3D_b( mesh%ti1:mesh%ti2,:) = ice%u_3D_SIA_b( mesh%ti1:mesh%ti2,:)
-      ice%v_3D_b( mesh%ti1:mesh%ti2,:) = ice%v_3D_SIA_b( mesh%ti1:mesh%ti2,:)
-
-      ! Basal velocity is zero
-      ice%u_base_b( mesh%ti1:mesh%ti2) = 0._dp
-      ice%v_base_b( mesh%ti1:mesh%ti2) = 0._dp
-
-      ! Calculate 3D vertical velocity from 3D horizontal velocities and conservation of mass
-      CALL calc_3D_vertical_velocities( mesh, ice)
-
-      ! Copy surface velocity from the 3D fields
-      ice%u_surf_b( mesh%ti1:mesh%ti2) = ice%u_3D_b( mesh%ti1:mesh%ti2,1)
-      ice%v_surf_b( mesh%ti1:mesh%ti2) = ice%v_3D_b( mesh%ti1:mesh%ti2,1)
-
-      ! Calculate vertically averaged velocities
-      DO ti = mesh%ti1, mesh%ti2
-        prof = ice%u_3D_b( ti,:)
-        CALL vertical_average( prof, ice%u_vav_b( ti))
-        prof = ice%v_3D_b( ti,:)
-        CALL vertical_average( prof, ice%v_vav_b( ti))
-      END DO
-
-    ELSEIF (C%choice_ice_dynamics == 'SSA') THEN
-      ! No SIA, just the SSA
-
-      ! No vertical variations in velocity; all fields are equal to the SSA answer
-      DO ti = mesh%ti1, mesh%ti2
-        ice%u_3D_b(   ti,:) = ice%u_base_SSA_b( ti)
-        ice%v_3D_b(   ti,:) = ice%v_base_SSA_b( ti)
-        ice%u_vav_b(  ti  ) = ice%u_base_SSA_b( ti)
-        ice%v_vav_b(  ti  ) = ice%v_base_SSA_b( ti)
-        ice%u_surf_b( ti  ) = ice%u_base_SSA_b( ti)
-        ice%v_surf_b( ti  ) = ice%v_base_SSA_b( ti)
-        ice%u_base_b( ti  ) = ice%u_base_SSA_b( ti)
-        ice%v_base_b( ti  ) = ice%v_base_SSA_b( ti)
-      END DO
-
-      ! No vertical velocity
-      ice%w_3D_a( mesh%vi1:mesh%vi2,:) = 0._dp
-
-    ELSEIF (C%choice_ice_dynamics == 'SIA/SSA') THEN
-      ! Hybrid SIA/SSA
-
-      ! Set basal velocity equal to SSA answer
-      ice%u_base_b( mesh%ti1:mesh%ti2) = ice%u_base_SSA_b( mesh%ti1:mesh%ti2)
-      ice%v_base_b( mesh%ti1:mesh%ti2) = ice%v_base_SSA_b( mesh%ti1:mesh%ti2)
-
-      ! Set 3-D velocities equal to the SIA solution
-      ice%u_3D_b( mesh%ti1:mesh%ti2,:) = ice%u_3D_SIA_b( mesh%ti1:mesh%ti2,:)
-      ice%v_3D_b( mesh%ti1:mesh%ti2,:) = ice%v_3D_SIA_b( mesh%ti1:mesh%ti2,:)
-
-      ! Add the SSA contributions to the 3-D velocities
-      DO k = 1, C%nz
-        ice%u_3D_b( mesh%ti1:mesh%ti2,k) = ice%u_3D_b( mesh%ti1:mesh%ti2,k) + ice%u_base_b( mesh%ti1:mesh%ti2)
-        ice%v_3D_b( mesh%ti1:mesh%ti2,k) = ice%v_3D_b( mesh%ti1:mesh%ti2,k) + ice%v_base_b( mesh%ti1:mesh%ti2)
-      END DO
-
-      ! Calculate 3D vertical velocity from 3D horizontal velocities and conservation of mass
-      CALL calc_3D_vertical_velocities( mesh, ice)
-
-      ! Copy surface velocity from the 3D fields
-      ice%u_surf_b( mesh%ti1:mesh%ti2) = ice%u_3D_b( mesh%ti1:mesh%ti2,1)
-      ice%v_surf_b( mesh%ti1:mesh%ti2) = ice%v_3D_b( mesh%ti1:mesh%ti2,1)
-
-      ! Calculate vertically averaged velocities
-      DO ti = mesh%ti1, mesh%ti2
-        prof = ice%u_3D_b( ti,:)
-        CALL vertical_average( prof, ice%u_vav_b( ti))
-        prof = ice%v_3D_b( ti,:)
-        CALL vertical_average( prof, ice%v_vav_b( ti))
-      END DO
-
-    ELSEIF (C%choice_ice_dynamics == 'DIVA') THEN
-      ! DIVA
-
-      ! Calculate basal velocity from depth-averaged solution and basal stress on the b-grid
-      CALL calc_basal_velocities_DIVA( mesh, ice)
-
-      ! Calculate 3-D velocity solution from the DIVA
-      CALL calc_3D_horizontal_velocities_DIVA( mesh, ice)
-
-      ! Copy surface velocity from the 3D fields
-      ice%u_surf_b( mesh%ti1:mesh%ti2) = ice%u_3D_b( mesh%ti1:mesh%ti2,1)
-      ice%v_surf_b( mesh%ti1:mesh%ti2) = ice%v_3D_b( mesh%ti1:mesh%ti2,1)
-
-      ! Calculate 3D vertical velocity from 3D horizontal velocities and conservation of mass
-      CALL calc_3D_vertical_velocities( mesh, ice)
-
-      ! Calculate vertically averaged velocities
-      DO ti = mesh%ti1, mesh%ti2
-        prof = ice%u_3D_b( ti,:)
-        CALL vertical_average( prof, ice%u_vav_b( ti))
-        prof = ice%v_3D_b( ti,:)
-        CALL vertical_average( prof, ice%v_vav_b( ti))
-      END DO
-
-
-    ELSE
-      CALL crash('unknown choice_ice_dynamics "' // TRIM( C%choice_ice_dynamics) // '"!')
-    END IF
-
-    ! Map velocity components to the a-grid
-    CALL map_velocities_b_to_a_3D( mesh, ice%u_3D_b  , ice%v_3D_b  , ice%u_3D_a  , ice%v_3D_a  )
-    CALL map_velocities_b_to_a_2D( mesh, ice%u_vav_b , ice%v_vav_b , ice%u_vav_a , ice%v_vav_a )
-    CALL map_velocities_b_to_a_2D( mesh, ice%u_surf_b, ice%v_surf_b, ice%u_surf_a, ice%v_surf_a)
-    CALL map_velocities_b_to_a_2D( mesh, ice%u_base_b, ice%v_base_b, ice%u_base_a, ice%v_base_a)
-
-    ! Calculate absolute velocities
-    DO ti = mesh%ti1, mesh%ti2
-      ice%uabs_vav_b(  ti) = SQRT( ice%u_vav_b(  ti)**2 + ice%v_vav_b(  ti)**2)
-      ice%uabs_surf_b( ti) = SQRT( ice%u_surf_b( ti)**2 + ice%v_surf_b( ti)**2)
-      ice%uabs_base_b( ti) = SQRT( ice%u_base_b( ti)**2 + ice%v_base_b( ti)**2)
-    END DO
-    DO vi = mesh%vi1, mesh%vi2
-      ice%uabs_vav_a(  vi) = SQRT( ice%u_vav_a(  vi)**2 + ice%v_vav_a(  vi)**2)
-      ice%uabs_surf_a( vi) = SQRT( ice%u_surf_a( vi)**2 + ice%v_surf_a( vi)**2)
-      ice%uabs_base_a( vi) = SQRT( ice%u_base_a( vi)**2 + ice%v_base_a( vi)**2)
-    END DO
-
-    ! Finalise routine path
-    CALL finalise_routine( routine_name)
-
-  END SUBROUTINE calc_secondary_velocities
-  SUBROUTINE calc_3D_vertical_velocities( mesh, ice)
-    ! Use simple conservation of mass to calculate the vertical velocity w_3D
-
-    IMPLICIT NONE
-
-    ! In- and output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    TYPE(type_ice_model),                INTENT(INOUT) :: ice
-
-    ! Local variables:
-    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'calc_3D_vertical_velocities'
-    INTEGER                                            :: vi, k
-    REAL(dp), DIMENSION(:    ), allocatable                ::  dHi_dx_a,  dHi_dy_a,  dHs_dx_a,  dHs_dy_a
-    REAL(dp), DIMENSION(:,:  ), allocatable            ::  du_dx_3D_a,  dv_dy_3D_a
-    REAL(dp)                                           :: dHbase_dx, dHbase_dy
-    REAL(dp)                                           :: du_dx_k,   dv_dy_k
-    REAL(dp)                                           :: du_dx_kp1, dv_dy_kp1
-    REAL(dp)                                           :: w1, w2, w3, w4
-
-    ! Add routine to path
-    CALL init_routine( routine_name)
-
-    ! Allocate shared memory
-    allocate( dHi_dx_a  (mesh%vi1:mesh%vi2      ))
-    allocate( dHi_dy_a  (mesh%vi1:mesh%vi2      ))
-    allocate( dHs_dx_a  (mesh%vi1:mesh%vi2      ))
-    allocate( dHs_dy_a  (mesh%vi1:mesh%vi2      ))
-    allocate( du_dx_3D_a(mesh%vi1:mesh%vi2, C%nz))
-    allocate( dv_dy_3D_a(mesh%vi1:mesh%vi2, C%nz))
-
-    ! Calculate surface & ice thickness gradients
-    CALL ddx_a_to_a_2D( mesh, ice%Hs_a  , dHs_dx_a  )
-    CALL ddy_a_to_a_2D( mesh, ice%Hs_a  , dHs_dy_a  )
-    CALL ddx_a_to_a_2D( mesh, ice%Hi_a  , dHi_dx_a  )
-    CALL ddy_a_to_a_2D( mesh, ice%Hi_a  , dHi_dy_a  )
-
-    ! Calculate strain rates
-    CALL ddx_b_to_a_3D( mesh, ice%u_3D_b, du_dx_3D_a)
-    CALL ddy_b_to_a_3D( mesh, ice%v_3D_b, dv_dy_3D_a)
-
-    ! Integrate over the incompressibility condition to find the vertical velocity profiles
-    DO vi = mesh%vi1, mesh%vi2
-
-      IF (ice%mask_ice_a( vi) == 0) CYCLE
-
-      ! Calculate the ice basal surface slope (not the same as bedrock slope when ice is floating!)
-      dHbase_dx = dHs_dx_a( vi) - dHi_dx_a( vi)
-      dHbase_dy = dHs_dy_a( vi) - dHi_dy_a( vi)
-
-      ! Calculate the vertical velocity at the ice base
-      IF (ice%mask_sheet_a( vi) == 1) THEN
-        ice%w_3D_a( vi,C%nz) = (ice%u_3D_a( vi,C%nz) * dHbase_dx) + (ice%v_3D_a( vi,C%nz) * dHbase_dy) + ice%dHb_dt_a( vi)
-      ELSE
-        ice%w_3D_a( vi,C%nz) = (ice%u_3D_a( vi,C%nz) * dHbase_dx) + (ice%v_3D_a( vi,C%nz) * dHbase_dy) ! Should this include the ice thinning rate?
-      END IF
-
-      ! The integrant is calculated half way the layer of integration at k+1/2. This integrant is multiplied with the layer thickness and added to the integral
-      ! of all layers below, giving the integral up to and including this layer:
-      DO k = C%nz - 1, 1, -1
-
-        du_dx_k   = du_dx_3D_a( vi,k  )
-        du_dx_kp1 = du_dx_3D_a( vi,k+1)
-        dv_dy_k   = dv_dy_3D_a( vi,k  )
-        dv_dy_kp1 = dv_dy_3D_a( vi,k+1)
-
-        w1 = (du_dx_k + du_dx_kp1) / 2._dp
-        w2 = (dv_dy_k + dv_dy_kp1) / 2._dp
-
-        w3 = ((dHs_dx_a( vi) - 0.5_dp * (C%zeta(k+1) + C%zeta(k)) * dHi_dx_a( vi)) / MAX(0.1_dp, ice%Hi_a( vi))) *   &
-             ((ice%u_3D_a( vi,k+1) - ice%u_3D_a( vi,k)) / (C%zeta(k+1) - C%zeta(k)))
-        w4 = ((dHs_dy_a( vi) - 0.5_dp * (C%zeta(k+1) + C%zeta(k)) * dHi_dy_a( vi)) / MAX(0.1_dp, ice%Hi_a( vi))) *   &
-             ((ice%v_3D_a( vi,k+1) - ice%v_3D_a( vi,k)) / (C%zeta(k+1) - C%zeta(k)))
-
-        ice%w_3D_a( vi,k) = ice%w_3D_a( vi,k+1) - ice%Hi_a( vi) * (w1 + w2 + w3 + w4) * (C%zeta(k+1) - C%zeta(k))
-
-      END DO ! DO k = C%nZ - 1, 1, -1
-
-    END DO ! DO vi = mesh%v1, mesh%v2
-
-    ! Clean up after yourself
-    deallocate( dHi_dx_a  )
-    deallocate( dHi_dy_a  )
-    deallocate( dHs_dx_a  )
-    deallocate( dHs_dy_a  )
-    deallocate( du_dx_3D_a)
-    deallocate( dv_dy_3D_a)
-
-    ! Finalise routine path
-    CALL finalise_routine( routine_name)
-
-  END SUBROUTINE calc_3D_vertical_velocities
-
-  ! Calculate some physical terms (basal yield stress, effective viscosity, etc.)
-  SUBROUTINE calculate_driving_stress( mesh, ice)
+  subroutine calculate_driving_stress( mesh, ice)
     ! Calculate the driving stress taud (in both x and y) on the b-grid
 
-    IMPLICIT NONE
+    implicit none
 
     ! In/output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    TYPE(type_ice_model),                INTENT(INOUT) :: ice
+    type(type_mesh),      intent(in)    :: mesh
+    type(type_ice_model), intent(inout) :: ice
 
     ! Local variables:
-    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'calculate_driving_stress'
-    INTEGER                                            :: ti
-    REAL(dp), DIMENSION(:    ), POINTER                ::  dHs_dx_b,  dHs_dy_b,  Hi_b
-    INTEGER                                            :: wdHs_dx_b, wdHs_dy_b, wHi_b
+    character(len=256), parameter       :: routine_name = 'calculate_driving_stress'
+    integer                             :: ti
+    real(dp), dimension(:), pointer     ::  dHs_dx_b,  dHs_dy_b,  Hi_b
+    integer                             :: wdHs_dx_b, wdHs_dy_b, wHi_b
 
     ! Add routine to path
-    CALL init_routine( routine_name)
+    call init_routine( routine_name)
 
     ! Allocate shared memory
     allocate( dHs_dx_b(mesh%ti1:mesh%ti2))
@@ -689,17 +471,17 @@ contains
     allocate( Hi_b    (mesh%ti1:mesh%ti2))
 
     ! Map ice thickness to the b-grid
-    CALL map_a_to_b_2D( mesh, ice%Hi_a, Hi_b)
+    call map_a_to_b_2D( mesh, ice%Hi_a, Hi_b)
 
     ! Calculate surface slopes on the b-grid
-    CALL ddx_a_to_b_2D( mesh, ice%Hs_a, dHs_dx_b)
-    CALL ddy_a_to_b_2D( mesh, ice%Hs_a, dHs_dy_b)
+    call ddx_a_to_b_2D( mesh, ice%Hs_a, dHs_dx_b)
+    call ddy_a_to_b_2D( mesh, ice%Hs_a, dHs_dy_b)
 
     ! Calculate driving stresses on the b-grid
-    DO ti =  mesh%ti1, mesh%ti2
+    do ti =  mesh%ti1, mesh%ti2
       ice%taudx_b( ti) = -ice_density * grav * Hi_b( ti) * dHs_dx_b( ti)
       ice%taudy_b( ti) = -ice_density * grav * Hi_b( ti) * dHs_dy_b( ti)
-    END DO
+    end do
 
     ! Clean up after yourself
     deallocate( dHs_dx_b)
@@ -707,9 +489,10 @@ contains
     deallocate( Hi_b    )
 
     ! Finalise routine path
-    CALL finalise_routine( routine_name)
+    call finalise_routine( routine_name)
 
-  END SUBROUTINE calculate_driving_stress
+  end subroutine calculate_driving_stress
+
   SUBROUTINE calc_vertical_shear_strain_rates( mesh, ice)
     ! Calculate vertical shear rates (Lipscomb et al. 2019, Eq. 36)
 
@@ -755,186 +538,93 @@ contains
     CALL finalise_routine( routine_name)
 
   END SUBROUTINE calc_vertical_shear_strain_rates
-  SUBROUTINE calc_effective_viscosity( mesh, ice, u_b, v_b)
-    ! Calculate 3D effective viscosity following Lipscomb et al. (2019), Eq. 2
+
+  SUBROUTINE calc_basal_stress_DIVA( mesh, ice, u_b, v_b)
+    ! Calculate the basal stress resulting from sliding (friction times velocity)
 
     IMPLICIT NONE
 
     ! In- and output variables:
     TYPE(type_mesh),                     INTENT(IN)    :: mesh
     TYPE(type_ice_model),                INTENT(INOUT) :: ice
-    REAL(dp), DIMENSION(:    ),          INTENT(IN)    :: u_b
-    REAL(dp), DIMENSION(:    ),          INTENT(IN)    :: v_b
+    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2), INTENT(IN) :: u_b, v_b
 
     ! Local variables:
-    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'calc_effective_viscosity'
-    INTEGER                                            :: vi, k
-    REAL(dp)                                           :: eps_sq
-    REAL(dp), DIMENSION(C%nz)                          :: prof
-    REAL(dp), DIMENSION(:,:  ), allocatable            :: du_dz_3D_a,  dv_dz_3D_a
-    REAL(dp), DIMENSION(  :  ), allocatable            :: N_a
+    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'calc_basal_stress_DIVA'
+    INTEGER                                            :: ti
 
     ! Add routine to path
     CALL init_routine( routine_name)
 
-    ! Calculate effective strain components from horizontal stretching
-    CALL ddx_b_to_a_2D( mesh, u_b, ice%du_dx_a)
-    CALL ddy_b_to_a_2D( mesh, u_b, ice%du_dy_a)
-    CALL ddx_b_to_a_2D( mesh, v_b, ice%dv_dx_a)
-    CALL ddy_b_to_a_2D( mesh, v_b, ice%dv_dy_a)
-
-    ! Map vertical shear strain rates to the a-grid
-    allocate( du_dz_3D_a(mesh%vi1:mesh%vi2, C%nz))
-    allocate( dv_dz_3D_a(mesh%vi1:mesh%vi2, C%nz))
-    CALL map_b_to_a_3D( mesh, ice%du_dz_3D_b, du_dz_3D_a)
-    CALL map_b_to_a_3D( mesh, ice%dv_dz_3D_b, dv_dz_3D_a)
-
-    DO vi = mesh%vi1, mesh%vi2
-
-      DO k = 1, C%nz
-
-        ! Calculate the total effective strain rate from L19, Eq. 21
-        eps_sq = ice%du_dx_a( vi)**2 + &
-                 ice%dv_dy_a( vi)**2 + &
-                 ice%du_dx_a( vi) * ice%dv_dy_a( vi) + &
-                 0.25_dp * (ice%du_dy_a( vi) + ice%dv_dx_a( vi))**2 + &
-                 0.25_dp * (du_dz_3D_a( vi,k)**2 + dv_dz_3D_a( vi,k)**2) + &
-                 C%DIVA_epsilon_sq_0
-
-        ! Calculate effective viscosity
-        ice%visc_eff_3D_a( vi,k) = 0.5_dp * ice%A_flow_3D_a( vi,k)**(-1._dp/C%n_flow) * (eps_sq)**((1._dp - C%n_flow)/(2._dp*C%n_flow))
-
-        ! Safety
-        ice%visc_eff_3D_a( vi,k) = MAX( ice%visc_eff_3D_a( vi,k), C%DIVA_visc_eff_min)
-
-      END DO ! DO k = 1, C%nz
-
-      ! Vertical integral
-      prof = ice%visc_eff_3D_a( vi,:)
-      CALL vertical_integrate( prof, ice%visc_eff_int_a( vi))
-
-      ! Product term N = eta * H
-      ice%N_a( vi) = ice%visc_eff_int_a( vi) * MAX( 0.1_dp, ice%Hi_a( vi))
-
+    DO ti = mesh%ti1, mesh%ti2
+      ice%taubx_b( ti) = ice%beta_eff_b( ti) * u_b( ti)
+      ice%tauby_b( ti) = ice%beta_eff_b( ti) * v_b( ti)
     END DO
-
-    ! Clean up after yourself
-    deallocate( du_dz_3D_a)
-    deallocate( dv_dz_3D_a)
-
-    ! Apply Neumann boundary conditions to correct inaccurate solutions at the domain border
-    allocate(N_a(mesh%nV))
-    N_a(mesh%vi1:mesh%vi2) = ice%N_a
-    call allgather_array(N_a)
-
-    CALL apply_Neumann_BC_direct_a_2D( mesh, N_a)
-
-    ice%N_a = N_a(mesh%vi1:mesh%vi2)
-    deallocate(N_a)
+    CALL sync
 
     ! Safety
-    CALL check_for_zero( ice%visc_eff_3D_a,  'ice%visc_eff_3D_a' )
-    CALL check_for_nan( ice%visc_eff_3D_a,  'ice%visc_eff_3D_a' )
-    CALL check_for_zero( ice%visc_eff_int_a,  'ice%visc_eff_int_a' )
-    CALL check_for_nan( ice%visc_eff_int_a, 'ice%visc_eff_int_a')
-    CALL check_for_nan( ice%N_a,            'ice%N_a'           )
+    CALL check_for_nan( ice%taubx_b, 'ice%taubx_b')
+    CALL check_for_nan( ice%tauby_b, 'ice%tauby_b')
 
     ! Finalise routine path
     CALL finalise_routine( routine_name)
 
-  END SUBROUTINE calc_effective_viscosity
-  SUBROUTINE calc_sliding_term_beta( mesh, ice, u_b, v_b)
+  END SUBROUTINE calc_basal_stress_DIVA
+
+  subroutine calc_sliding_term_beta( mesh, ice, u_b, v_b)
     ! Calculate the sliding term beta in the SSA/DIVA using the specified sliding law
 
-    IMPLICIT NONE
+    implicit none
 
     ! In- and output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    TYPE(type_ice_model),                INTENT(INOUT) :: ice
-    REAL(dp), DIMENSION(:    ),          INTENT(IN)    :: u_b
-    REAL(dp), DIMENSION(:    ),          INTENT(IN)    :: v_b
+    type(type_mesh),        intent(in)    :: mesh
+    type(type_ice_model),   intent(inout) :: ice
+    real(dp), dimension(:), intent(in)    :: u_b
+    real(dp), dimension(:), intent(in)    :: v_b
 
     ! Local variables:
-    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'calc_sliding_term_beta'
-    INTEGER                                            :: vi
-    REAL(dp), DIMENSION(:    ), allocatable            ::  u_a,  v_a
+    character(len=256), parameter         :: routine_name = 'calc_sliding_term_beta'
+    integer                               :: vi
+    real(dp), dimension(:), allocatable   ::  u_a,  v_a
 
     ! Add routine to path
-    CALL init_routine( routine_name)
+    call init_routine( routine_name)
 
     ! Allocate shared memory
     allocate( u_a(mesh%vi1:mesh%vi2))
     allocate( v_a(mesh%vi1:mesh%vi2))
 
     ! Get velocities on the a-grid
-    CALL map_b_to_a_2D( mesh, u_b, u_a)
-    CALL map_b_to_a_2D( mesh, v_b, v_a)
+    call map_b_to_a_2D( mesh, u_b, u_a)
+    call map_b_to_a_2D( mesh, v_b, v_a)
 
     ! Calculate the basal friction coefficients beta on the a-grid
-    CALL calc_sliding_law( mesh, ice, u_a, v_a, ice%beta_a)
+    call calc_sliding_law( mesh, ice, u_a, v_a, ice%beta_a)
 
     ! Limit beta to improve stability
-    DO vi = mesh%vi1, mesh%vi2
+    do vi = mesh%vi1, mesh%vi2
       ice%beta_a( vi) = MIN( C%DIVA_beta_max, ice%beta_a( vi))
-    END DO
+    end do
 
     ! LEGACY - Apply the flotation mask (this is how we did it before we introduced the PISM/CISM-style sub-grid grounded fraction)
-    IF (.NOT. C%do_GL_subgrid_friction) THEN
-      DO vi = mesh%vi1, mesh%vi2
-        IF (ice%mask_ocean_a( vi) == 1) ice%beta_a( vi) = 0._dp
-      END DO
-    END IF
+    if (.not. C%do_GL_subgrid_friction) then
+      do vi = mesh%vi1, mesh%vi2
+        ice%beta_a( vi) = ice%beta_a( vi) * real( ice%mask_land_a( vi), dp)
+      end do
+    end if
 
     ! Clean up after yourself
     deallocate( u_a)
     deallocate( v_a)
 
     ! Safety
-    CALL check_for_nan( ice%beta_a, 'ice%beta_a')
+    call check_for_nan( ice%beta_a, 'ice%beta_a')
 
     ! Finalise routine path
-    CALL finalise_routine( routine_name)
+    call finalise_routine( routine_name)
 
-  END SUBROUTINE calc_sliding_term_beta
-  SUBROUTINE calc_F_integral( mesh, ice, n)
-    ! Calculate the integral F2 in Lipscomb et al. (2019), Eq. 30
+  end subroutine calc_sliding_term_beta
 
-    IMPLICIT NONE
-
-    ! In- and output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    TYPE(type_ice_model),                INTENT(INOUT) :: ice
-    REAL(dp),                            INTENT(IN)    :: n
-
-    ! Local variables:
-    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'calc_F_integral'
-    INTEGER                                            :: vi
-    REAL(dp)                                           :: F_int_min
-    REAL(dp), DIMENSION(C%nz)                          :: prof
-
-    ! Add routine to path
-    CALL init_routine( routine_name)
-
-    ! Set a lower limit for F2 to improve numerical stability
-    prof = (1._dp / C%DIVA_visc_eff_min) * C%zeta**n
-    CALL vertical_integrate( prof, F_int_min)
-
-    DO vi = mesh%vi1, mesh%vi2
-
-      prof = (ice%Hi_a( vi) / ice%visc_eff_3D_a( vi,:)) * C%zeta**n
-      CALL vertical_integrate( prof, ice%F2_a( vi))
-      ice%F2_a( vi) = MAX( ice%F2_a( vi), F_int_min)
-
-    END DO
-    CALL sync
-
-    ! Safety
-    CALL check_for_nan( ice%F2_a, 'ice%F2_a')
-
-    ! Finalise routine path
-    CALL finalise_routine( routine_name)
-
-  END SUBROUTINE calc_F_integral
   SUBROUTINE calc_beta_eff( mesh, ice)
     ! Calculate the "effective basal friction" beta_eff, used in the DIVA
 
@@ -990,37 +680,1062 @@ contains
     CALL finalise_routine( routine_name)
 
   END SUBROUTINE calc_beta_eff
-  SUBROUTINE calc_basal_stress_DIVA( mesh, ice, u_b, v_b)
-    ! Calculate the basal stress resulting from sliding (friction times velocity)
+
+! ===== Viscosity =====
+! =====================
+
+  subroutine calc_effective_viscosity( mesh, ice, u_b, v_b)
+    ! Calculate 3D effective viscosity following Lipscomb et al. (2019), Eq. 2
+
+    implicit none
+
+    ! In- and output variables:
+    type(type_mesh),        intent(in)    :: mesh
+    type(type_ice_model),   intent(inout) :: ice
+    real(dp), dimension(:), intent(in)    :: u_b
+    real(dp), dimension(:), intent(in)    :: v_b
+
+    ! Local variables:
+    character(len=256), parameter         :: routine_name = 'calc_effective_viscosity'
+    integer                               :: vi, k
+    real(dp)                              :: eps_sq
+    real(dp), dimension(C%nz)             :: prof
+    real(dp), dimension(:,:), allocatable :: du_dz_3D_a,  dv_dz_3D_a
+    real(dp), dimension(:), allocatable   :: N_a
+
+    ! Initialisation
+    ! ==============
+
+    ! Add routine to path
+    call init_routine( routine_name)
+
+    ! Effective strain on the a-grid
+    ! ==============================
+
+    ! Calculate effective strain components from horizontal stretching
+    call ddx_b_to_a_2D( mesh, u_b, ice%du_dx_a)
+    call ddy_b_to_a_2D( mesh, u_b, ice%du_dy_a)
+    call ddx_b_to_a_2D( mesh, v_b, ice%dv_dx_a)
+    call ddy_b_to_a_2D( mesh, v_b, ice%dv_dy_a)
+
+    ! Map vertical shear strain rates to the a-grid
+    allocate( du_dz_3D_a(mesh%vi1:mesh%vi2, C%nz))
+    allocate( dv_dz_3D_a(mesh%vi1:mesh%vi2, C%nz))
+    call map_b_to_a_3D( mesh, ice%du_dz_3D_b, du_dz_3D_a)
+    call map_b_to_a_3D( mesh, ice%dv_dz_3D_b, dv_dz_3D_a)
+
+    ! The N term
+    ! ==========
+
+    do vi = mesh%vi1, mesh%vi2
+
+      ! Loop over each vertical layer
+      do k = 1, C%nz
+
+        ! Calculate the total effective strain rate from
+        ! Lipscomb et al. (2019), Eq. 21 (also Doc. Eq. 7)
+        eps_sq = ice%du_dx_a( vi)**2 + &
+                 ice%dv_dy_a( vi)**2 + &
+                 ice%du_dx_a( vi) * ice%dv_dy_a( vi) + &
+                 0.25_dp * (ice%du_dy_a( vi) + ice%dv_dx_a( vi))**2 + &
+                 0.25_dp * (du_dz_3D_a( vi,k)**2 + dv_dz_3D_a( vi,k)**2) + &
+                 C%DIVA_epsilon_sq_0
+
+        ! Calculate effective viscosity (Doc. Eq. 7)
+        ice%visc_eff_3D_a( vi,k) = 0.5_dp * ice%A_flow_3D_a( vi,k)**(-1._dp/C%n_flow) * &
+                                   (eps_sq)**((1._dp - C%n_flow)/(2._dp*C%n_flow))
+
+        ! Safety
+        ice%visc_eff_3D_a( vi,k) = max( ice%visc_eff_3D_a( vi,k), C%DIVA_visc_eff_min)
+
+      end do ! k = 1, C%nz
+
+      ! Vertical integral (Doc. Eq. 7)
+      prof = ice%visc_eff_3D_a( vi,:)
+      call vertical_integrate( prof, ice%visc_eff_int_a( vi))
+
+      ! Product term N = eta * H (e.g. Doc. Eq. 7)
+      ice%N_a( vi) = ice%visc_eff_int_a( vi) * MAX( 0.1_dp, ice%Hi_a( vi))
+
+    end do
+
+    ! Boundary conditions
+    ! ===================
+
+    ! Apply Neumann boundary conditions to correct inaccurate solutions at the domain border
+    allocate(N_a(mesh%nV))
+    N_a(mesh%vi1:mesh%vi2) = ice%N_a
+    call allgather_array(N_a)
+
+    call apply_Neumann_BC_direct_a_2D( mesh, N_a)
+
+    ice%N_a = N_a(mesh%vi1:mesh%vi2)
+
+    ! Finalisation
+    ! ============
+
+    ! Safety
+    call check_for_zero( ice%visc_eff_3D_a,  'ice%visc_eff_3D_a' )
+    call check_for_nan(  ice%visc_eff_3D_a,  'ice%visc_eff_3D_a' )
+    call check_for_zero( ice%visc_eff_int_a, 'ice%visc_eff_int_a')
+    call check_for_nan(  ice%visc_eff_int_a, 'ice%visc_eff_int_a')
+    call check_for_nan(  ice%N_a,            'ice%N_a'           )
+
+    ! Clean up after yourself
+    deallocate( du_dz_3D_a)
+    deallocate( dv_dz_3D_a)
+    deallocate( N_a)
+
+    ! Finalise routine path
+    call finalise_routine( routine_name)
+
+  end subroutine calc_effective_viscosity
+
+  SUBROUTINE calc_F_integral( mesh, ice, n)
+    ! Calculate the integral F2 in Lipscomb et al. (2019), Eq. 30
 
     IMPLICIT NONE
 
     ! In- and output variables:
     TYPE(type_mesh),                     INTENT(IN)    :: mesh
     TYPE(type_ice_model),                INTENT(INOUT) :: ice
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2), INTENT(IN) :: u_b, v_b
+    REAL(dp),                            INTENT(IN)    :: n
 
     ! Local variables:
-    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'calc_basal_stress_DIVA'
-    INTEGER                                            :: ti
+    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'calc_F_integral'
+    INTEGER                                            :: vi
+    REAL(dp)                                           :: F_int_min
+    REAL(dp), DIMENSION(C%nz)                          :: prof
 
     ! Add routine to path
     CALL init_routine( routine_name)
 
-    DO ti = mesh%ti1, mesh%ti2
-      ice%taubx_b( ti) = ice%beta_eff_b( ti) * u_b( ti)
-      ice%tauby_b( ti) = ice%beta_eff_b( ti) * v_b( ti)
+    ! Set a lower limit for F2 to improve numerical stability
+    prof = (1._dp / C%DIVA_visc_eff_min) * C%zeta**n
+    CALL vertical_integrate( prof, F_int_min)
+
+    DO vi = mesh%vi1, mesh%vi2
+
+      prof = (ice%Hi_a( vi) / ice%visc_eff_3D_a( vi,:)) * C%zeta**n
+      CALL vertical_integrate( prof, ice%F2_a( vi))
+      ice%F2_a( vi) = MAX( ice%F2_a( vi), F_int_min)
+
     END DO
     CALL sync
 
     ! Safety
-    CALL check_for_nan( ice%taubx_b, 'ice%taubx_b')
-    CALL check_for_nan( ice%tauby_b, 'ice%tauby_b')
+    CALL check_for_nan( ice%F2_a, 'ice%F2_a')
 
     ! Finalise routine path
     CALL finalise_routine( routine_name)
 
-  END SUBROUTINE calc_basal_stress_DIVA
+  END SUBROUTINE calc_F_integral
+
+! ===== "Linearised" SSA/DIVA =====
+! =================================
+
+  subroutine solve_SSADIVA_linearised( mesh, ice, u_b, v_b)
+    ! Solve the "linearised" version of the SSA (i.e. assuming viscosity and basal stress are
+    ! constant rather than functions of velocity) on the b-grid.
+    !
+    ! The full SSA reads:
+    !
+    !   d/dx[ 2N (2*du/dx + dv/dy)] + d/dy[ N (du/dy + dv/dx)] - beta*u = -taud_x
+    !   d/dy[ 2N (2*dv/dy + du/dx)] + d/dx[ N (dv/dx + du/dy)] - beta*v = -taud_y
+    !
+    ! Using the chain rule, this expands to:
+    !
+    !   4*N*d2u/dx2 + 4*dN/dx*du/dx + 2*N*d2v/dxdy + 2*dN/dx*dv/dy + N*d2u/dy2 + dN/dy*du/dy + N*d2v/dxdy + dN/dy*dv/dx - beta*u = -taud_x
+    !   4*N*d2v/dy2 + 4*dN/dy*dv/dy + 2*N*d2u/dxdy + 2*dN/dy*du/dx + N*d2v/dx2 + dN/dx*dv/dx + N*d2u/dxdy + dN/dx*du/dy - beta*v = -taud_y
+    !
+    ! Optionally, this can be simplified by neglecting all the "cross-terms" involving gradients of N:
+    !
+    !   4*N*d2u/dx2 + N*d2u/dy2 + 3*N*d2v/dxdy - beta*u = -taud_x
+    !   4*N*d2v/dy2 + N*d2v/dx2 + 3*N*d2u/dxdy - beta*v = -taud_y
+    !
+    ! The left and right sides of these equations can then be divided by N to yield:
+    !
+    ! 4*d2u/dx2 + d2u/dy2 + 3*d2v/dxdy - beta*u/N = -taud_x/N
+    ! 4*d2v/dy2 + d2v/dx2 + 3*d2u/dxdy - beta*v/N = -taud_y/N
+    !
+    ! By happy coincidence, this equation is much easier to solve, especially because (for unclear reasons)
+    ! it doesn't require N to be defined on a staggered grid relative to u,v in order to achieve a stable solution.
+
+    implicit none
+
+    ! In- and output variables:
+    type(type_mesh),                        intent(in)    :: mesh
+    type(type_ice_model),                   intent(inout) :: ice
+    real(dp), dimension(mesh%ti1:mesh%ti2), intent(inout) :: u_b
+    real(dp), dimension(mesh%ti1:mesh%ti2), intent(inout) :: v_b
+
+    ! Local variables:
+    character(len=256), parameter                         :: routine_name = 'solve_SSADIVA_linearised'
+    integer                                               :: ti, nu, nv, t21,t22, pti1, pti2
+    real(dp), dimension(:), allocatable                   :: N_b, dN_dx_b, dN_dy_b
+    real(dp), dimension(:), allocatable                   :: b_buv, uv_buv
+
+    ! Initialisation
+    ! ==============
+
+    ! Add routine to path
+    call init_routine( routine_name)
+
+    !(dividable by 2) ranges for b_buv,uv_buv
+    t21 = 1+2*(mesh%ti1-1)
+    t22 =   2*(mesh%ti2)
+
+    ! Allocate shared memory
+    allocate( N_b    (   mesh%ti1:mesh%ti2))
+    allocate( dN_dx_b(   mesh%ti1:mesh%ti2))
+    allocate( dN_dy_b(   mesh%ti1:mesh%ti2))
+    allocate( b_buv  (        t21:     t22))
+    allocate( uv_buv (        t21:     t22))
+
+    ! PETSc ranges for b_buv,uv_buv
+    call partition_list(mesh%nTri*2, par%i, par%n, pti1, pti2)
+
+    ! Calculate N, dN/dx, and dN/dy on the b-grid
+    call map_a_to_b_2D( mesh, ice%N_a, N_b    )
+    call ddx_a_to_b_2D( mesh, ice%N_a, dN_dx_b)
+    call ddy_a_to_b_2D( mesh, ice%N_a, dN_dy_b)
+
+    ! Fill in the coefficients of the stiffness matrix
+    ! ================================================
+
+    do ti = mesh%ti1, mesh%ti2
+
+      ! Check if this is a border triangle
+      if (mesh%Tri_edge_index( ti) /= 0) then
+        ! Apply boundary conditions
+        call calc_DIVA_matrix_coefficients_eq_1_boundary( mesh, ice, u_b, ti, b_buv, uv_buv)
+        call calc_DIVA_matrix_coefficients_eq_2_boundary( mesh, ice, u_b, ti, b_buv, uv_buv)
+        ! And skip the rest
+        cycle
+      end if
+
+      ! Interior triangle: fill in matrix row for the SSA/DIVA
+      if (C%include_SSADIVA_crossterms) then
+        ! Include the "cross-terms" of the SSA/DIVA
+        call calc_DIVA_matrix_coefficients_eq_1_free( mesh, ice, u_b, ti, N_b, dN_dx_b, dN_dy_b, b_buv, uv_buv)
+        call calc_DIVA_matrix_coefficients_eq_2_free( mesh, ice, u_b, ti, N_b, dN_dx_b, dN_dy_b, b_buv, uv_buv)
+      else
+        ! Do not include them
+        call calc_DIVA_matrix_coefficients_eq_1_free_sans( mesh, ice, u_b, ti, N_b, b_buv, uv_buv)
+        call calc_DIVA_matrix_coefficients_eq_2_free_sans( mesh, ice, u_b, ti, N_b, b_buv, uv_buv)
+      end if
+
+    end do
+
+    ! Solve the matrix equation
+    ! =========================
+
+    ! TODO: The problem: b_buv and uv_buv are divideable by two but, petsc doesnt know that and
+    ! will divide 6 into 3:3 for two procs for example, whereas the division should be 2:4 here in that case.
+    ! Solution: point-to-point communication of boundaries, or fixing it in petsc (possible, but hard)
+
+    call solve_matrix_equation_CSR( ice%M_SSADIVA, b_buv, uv_buv, &
+                                    C%DIVA_choice_matrix_solver, &
+                                    C%DIVA_SOR_nit             , &
+                                    C%DIVA_SOR_tol             , &
+                                    C%DIVA_SOR_omega           , &
+                                    C%DIVA_PETSc_rtol          , &
+                                    C%DIVA_PETSc_abstol)
+
+    call check_for_nan(uv_buv(t21:t22), "uv_buv")
+
+    ! Get solution back on the b-grid
+    ! ================================
+
+    do ti = mesh%ti1, mesh%ti2
+
+      nu = 2*ti - 1
+      nv = 2*ti
+
+      u_b( ti) = uv_buv( nu)
+      v_b( ti) = uv_buv( nv)
+
+    end do
+
+    ! Finalisation
+    ! ============
+
+    ! Clean up after yourself
+    deallocate( N_b    )
+    deallocate( dN_dx_b)
+    deallocate( dN_dy_b)
+    deallocate( b_buv  )
+    deallocate( uv_buv )
+
+    call check_for_nan(u_b, "u_b")
+    call check_for_nan(v_b, "v_b")
+
+    ! Finalise routine path
+    call finalise_routine( routine_name)
+
+  end subroutine solve_SSADIVA_linearised
+
+  subroutine calc_DIVA_matrix_coefficients_eq_1_free( mesh, ice, u_b, ti, N_b, dN_dx_b, dN_dy_b, b_buv, uv_buv)
+    ! Find the matrix coefficients of equation n and add them to the lists
+    !
+    !   4*N*d2u/dx2 + 4*dN/dx*du/dx + 2*N*d2v/dxdy + 2*dN/dx*dv/dy + N*d2u/dy2 + dN/dy*du/dy + N*d2v/dxdy + dN/dy*dv/dx - beta*u = -taud_x
+
+    implicit none
+
+    ! In- and output variables:
+    type(type_mesh),                                  intent(in)    :: mesh
+    type(type_ice_model),                             intent(inout) :: ice
+    real(dp), dimension(mesh%ti1:mesh%ti2),           intent(in)    :: u_b
+    integer,                                          intent(in)    :: ti
+    real(dp), dimension(mesh%ti1:mesh%ti2),           intent(in)    :: N_b, dN_dx_b, dN_dy_b
+    real(dp), dimension(2*(mesh%ti1-1)+1:2*mesh%ti2), intent(inout) :: b_buv, uv_buv
+
+    ! Local variables:
+    integer                                                         :: nu, nnz, kk, ku, kv, k, mu
+
+    nu = ice%ti2n_u( ti)
+
+    nnz = (ice%M_SSADIVA%ptr( nu+1) - ice%M_SSADIVA%ptr( nu)) / 2
+
+    do kk = 1, nnz
+
+      ku = ice%M_SSADIVA%ptr( nu) + 2*kk - 2
+      kv = ice%M_SSADIVA%ptr( nu) + 2*kk - 1
+      k  = mesh%M2_ddx_b_b_CSR%ptr( ti) +   kk - 1
+
+      mu = ice%M_SSADIVA%index( ku)
+
+      ! u-part
+      ice%M_SSADIVA%val( ku) = 4._dp * N_b(     ti) * mesh%M2_d2dx2_b_b_CSR%val( k) + &
+                               4._dp * dN_dx_b( ti) * mesh%M2_ddx_b_b_CSR%val(   k) + &
+                               1._dp * N_b(     ti) * mesh%M2_d2dy2_b_b_CSR%val( k) + &
+                               1._dp * dN_dy_b( ti) * mesh%M2_ddy_b_b_CSR%val(   k)
+
+      ! Sliding term on the diagonal
+      if (mu == nu) then
+        ice%M_SSADIVA%val( ku) = ice%M_SSADIVA%val( ku) - ice%beta_eff_b( ti)
+      end if
+
+      ! v-part
+      ice%M_SSADIVA%val( kv) = 3._dp * N_b(     ti) * mesh%M2_d2dxdy_b_b_CSR%val( k) + &
+                               2._dp * dN_dx_b( ti) * mesh%M2_ddy_b_b_CSR%val(    k) + &
+                               1._dp * dN_dy_b( ti) * mesh%M2_ddx_b_b_CSR%val(    k)
+
+    end do
+
+    ! Right-hand side and initial guess
+    b_buv(  nu) = -ice%taudx_b( ti)
+    uv_buv( nu) = u_b( ti)
+
+  end subroutine calc_DIVA_matrix_coefficients_eq_1_free
+
+  subroutine calc_DIVA_matrix_coefficients_eq_2_free( mesh, ice, v_b, ti, N_b, dN_dx_b, dN_dy_b, b_buv, uv_buv)
+    ! Find the matrix coefficients of equation n and add them to the lists
+    !
+    !   4*N*d2v/dy2 + 4*dN/dy*dv/dy + 2*N*d2u/dxdy + 2*dN/dy*du/dx + N*d2v/dx2 + dN/dx*dv/dx + N*d2u/dxdy + dN/dx*du/dy - beta*v = -taud_y
+
+    implicit none
+
+    ! In- and output variables:
+    type(type_mesh),                                  intent(in)    :: mesh
+    type(type_ice_model),                             intent(inout) :: ice
+    real(dp), dimension(mesh%ti1:mesh%ti2),           intent(in)    :: v_b
+    integer,                                          intent(in)    :: ti
+    real(dp), dimension(mesh%ti1:mesh%ti2),           intent(in)    :: N_b, dN_dx_b, dN_dy_b
+    real(dp), dimension(2*(mesh%ti1-1)+1:2*mesh%ti2), intent(inout) :: b_buv, uv_buv
+
+    ! Local variables:
+    integer                                                         :: nv, nnz, kk, ku, kv, k, mv
+
+    nv = ice%ti2n_v( ti)
+
+    nnz = (ice%M_SSADIVA%ptr( nv+1) - ice%M_SSADIVA%ptr( nv)) / 2
+
+    do kk = 1, nnz
+
+      ku = ice%M_SSADIVA%ptr( nv) + 2*kk - 2
+      kv = ice%M_SSADIVA%ptr( nv) + 2*kk - 1
+      k  = mesh%M2_ddx_b_b_CSR%ptr( ti) + kk - 1
+
+      mv = ice%M_SSADIVA%index(   kv)
+
+      ! v-part
+      ice%M_SSADIVA%val( kv) = 4._dp * N_b(     ti) * mesh%M2_d2dy2_b_b_CSR%val( k) + &
+                               4._dp * dN_dy_b( ti) * mesh%M2_ddy_b_b_CSR%val(   k) + &
+                               1._dp * N_b(     ti) * mesh%M2_d2dx2_b_b_CSR%val( k) + &
+                               1._dp * dN_dx_b( ti) * mesh%M2_ddx_b_b_CSR%val(   k)
+
+      ! Sliding term on the diagonal
+      if (mv == nv) then
+        ice%M_SSADIVA%val( kv) = ice%M_SSADIVA%val( kv) - ice%beta_eff_b( ti)
+      end if
+
+      ! u-part
+      ice%M_SSADIVA%val( ku) = 3._dp * N_b(     ti) * mesh%M2_d2dxdy_b_b_CSR%val( k) + &
+                               2._dp * dN_dy_b( ti) * mesh%M2_ddx_b_b_CSR%val(    k) + &
+                               1._dp * dN_dx_b( ti) * mesh%M2_ddy_b_b_CSR%val(    k)
+
+    end do
+
+    ! Right-hand side and initial guess
+    b_buv(  nv) = -ice%taudy_b( ti)
+    uv_buv( nv) = v_b( ti)
+
+  end subroutine calc_DIVA_matrix_coefficients_eq_2_free
+
+  subroutine calc_DIVA_matrix_coefficients_eq_1_free_sans( mesh, ice, u_b, ti, N_b, b_buv, uv_buv)
+    ! Find the matrix coefficients of equation n and add them to the lists
+    !
+    ! 4*d2u/dx2 + d2u/dy2 + 3*d2v/dxdy - beta*u/N = -taud_x/N
+
+    implicit none
+
+    ! In- and output variables:
+    type(type_mesh),                                  intent(in)    :: mesh
+    type(type_ice_model),                             intent(inout) :: ice
+    real(dp), dimension(mesh%ti1:mesh%ti2),           intent(in)    :: u_b
+    integer,                                          intent(in)    :: ti
+    real(dp), dimension(mesh%ti1:mesh%ti2),           intent(in)    :: N_b
+    real(dp), dimension(2*(mesh%ti1-1)+1:2*mesh%ti2), intent(inout) :: b_buv, uv_buv
+
+    ! Local variables:
+    integer                                                         :: nu, nnz, kk, ku, kv, k, mu
+
+    nu = ice%ti2n_u( ti)
+
+    nnz = (ice%M_SSADIVA%ptr( nu+1) - ice%M_SSADIVA%ptr( nu)) / 2
+
+    do kk = 1, nnz
+
+      ku = ice%M_SSADIVA%ptr( nu) + 2*kk - 2
+      kv = ice%M_SSADIVA%ptr( nu) + 2*kk - 1
+      k  = mesh%M2_ddx_b_b_CSR%ptr( ti) + kk - 1
+
+      mu = ice%M_SSADIVA%index( ku)
+
+      ! u-part
+      ice%M_SSADIVA%val( ku) = 4._dp * mesh%M2_d2dx2_b_b_CSR%val( k) + mesh%M2_d2dy2_b_b_CSR%val( k)
+
+      ! Sliding term on the diagonal
+      if (mu == nu) then
+        ice%M_SSADIVA%val( ku) = ice%M_SSADIVA%val( ku) - (ice%beta_eff_b( ti) / N_b( ti))
+      end if
+
+      ! v-part
+      ice%M_SSADIVA%val( kv) = 3._dp * mesh%M2_d2dxdy_b_b_CSR%val( k)
+
+    end do
+
+    ! Right-hand side and initial guess
+    b_buv(  nu) = -ice%taudx_b( ti) / N_b( ti)
+    uv_buv( nu) = u_b( ti)
+
+  end subroutine calc_DIVA_matrix_coefficients_eq_1_free_sans
+
+  subroutine calc_DIVA_matrix_coefficients_eq_2_free_sans( mesh, ice, v_b, ti, N_b, b_buv, uv_buv)
+    ! Find the matrix coefficients of equation n and add them to the lists
+    !
+    ! 4*d2v/dy2 + d2v/dx2 + 3*d2u/dxdy - beta*v/N = -taud_y/N
+
+    implicit none
+
+    ! In- and output variables:
+    type(type_mesh),                                  intent(in)    :: mesh
+    type(type_ice_model),                             intent(inout) :: ice
+    real(dp), dimension(mesh%ti1:mesh%ti2),           intent(in)    :: v_b
+    integer,                                          intent(in)    :: ti
+    real(dp), dimension(mesh%ti1:mesh%ti2),           intent(in)    :: N_b
+    real(dp), dimension(2*(mesh%ti1-1)+1:2*mesh%ti2), intent(inout) :: b_buv, uv_buv
+
+    ! Local variables:
+    integer                                                         :: nv, nnz, kk, ku, kv, k, mv
+
+    nv = ice%ti2n_v( ti)
+
+    nnz = (ice%M_SSADIVA%ptr( nv+1) - ice%M_SSADIVA%ptr( nv)) / 2
+
+    do kk = 1, nnz
+
+      ku = ice%M_SSADIVA%ptr( nv) + 2*kk - 2
+      kv = ice%M_SSADIVA%ptr( nv) + 2*kk - 1
+      k  = mesh%M2_ddx_b_b_CSR%ptr( ti) + kk - 1
+
+      mv = ice%M_SSADIVA%index( kv)
+
+      ! v-part
+      ice%M_SSADIVA%val( kv) = 4._dp * mesh%M2_d2dy2_b_b_CSR%val( k) + mesh%M2_d2dx2_b_b_CSR%val( k)
+
+      ! Sliding term on the diagonal
+      if (mv == nv) then
+        ice%M_SSADIVA%val( kv) = ice%M_SSADIVA%val( kv) - (ice%beta_eff_b( ti) / N_b( ti))
+      end if
+
+      ! u-part
+      ice%M_SSADIVA%val( ku) = 3._dp * mesh%M2_d2dxdy_b_b_CSR%val( k)
+
+    end do
+
+    ! Right-hand side and initial guess
+    b_buv(  nv) = -ice%taudy_b( ti) / N_b( ti)
+    uv_buv( nv) = v_b( ti)
+
+  end subroutine calc_DIVA_matrix_coefficients_eq_2_free_sans
+
+  subroutine calc_DIVA_matrix_coefficients_eq_1_boundary( mesh, ice, u_b, ti, b_buv, uv_buv)
+    ! Find the matrix coefficients of equation n and add them to the lists
+
+    implicit none
+
+    ! In- and output variables:
+    type(type_mesh),                                  intent(in)    :: mesh
+    type(type_ice_model),                             intent(inout) :: ice
+    real(dp), dimension(mesh%ti1:mesh%ti2),           intent(in)    :: u_b
+    integer,                                          intent(in)    :: ti
+    real(dp), dimension(2*(mesh%ti1-1)+1:2*mesh%ti2), intent(inout) :: b_buv, uv_buv
+
+    ! Local variables:
+    integer                                                         :: edge_index, nu, nnz, kk, ku, k, mu, n_neighbours
+    character(len=256)                                              :: BC
+    character(len=1)                                                :: face
+
+    edge_index = mesh%Tri_edge_index( ti)
+
+    ! Checks
+    if (C%DIVA_boundary_BC_u_north /= 'zero' .and. &
+        C%DIVA_boundary_BC_u_north /= 'infinite') then
+      call crash('unknown DIVA_boundary_BC_u_north "' // trim( C%DIVA_boundary_BC_u_north) // '"!')
+    end if
+    ! Checks
+    if (C%DIVA_boundary_BC_u_south /= 'zero' .and. &
+        C%DIVA_boundary_BC_u_south /= 'infinite') then
+      call crash('unknown DIVA_boundary_BC_u_south "' // trim( C%DIVA_boundary_BC_u_south) // '"!')
+    end if
+    ! Checks
+    if (C%DIVA_boundary_BC_u_east /= 'zero' .and. &
+        C%DIVA_boundary_BC_u_east /= 'infinite') then
+      call crash('unknown DIVA_boundary_BC_u_east "'  // trim( C%DIVA_boundary_BC_u_east) // '"!')
+    end if
+    ! Checks
+    if (C%DIVA_boundary_BC_u_west /= 'zero' .and. &
+        C%DIVA_boundary_BC_u_west /= 'infinite') then
+      call crash('unknown DIVA_boundary_BC_u_west "'  // trim( C%DIVA_boundary_BC_u_west) // '"!')
+    end if
+
+    ! Determine what kind of edge we are dealing with
+    select case (edge_index)
+      case (8,1,2)
+        ! North
+        if (C%DIVA_boundary_BC_u_north == 'zero') then
+          BC = 'zero'
+        elseif (C%DIVA_boundary_BC_u_north == 'infinite') then
+          BC = 'infinite'
+        end if
+      case (3)
+        ! East
+        if (C%DIVA_boundary_BC_u_east == 'zero') then
+          BC = 'zero'
+        elseif (C%DIVA_boundary_BC_u_east == 'infinite') then
+          BC = 'infinite'
+        end if
+      case (4,5,6)
+        ! South
+        if (C%DIVA_boundary_BC_u_south == 'zero') then
+          BC = 'zero'
+        elseif (C%DIVA_boundary_BC_u_south == 'infinite') then
+          BC = 'infinite'
+        end if
+      case (7)
+        ! West
+        if (C%DIVA_boundary_BC_u_west == 'zero') then
+          BC = 'zero'
+        elseif (C%DIVA_boundary_BC_u_west == 'infinite') then
+          BC = 'infinite'
+        end if
+      case default
+        call crash('invalid edge_index = {int_01} at ti = {int_02}!', int_01 = edge_index, int_02 = ti)
+    end select
+
+    ! Apply boundary condition
+    select case (BC)
+
+      case ('zero')
+        ! Let u = 0 at this domain boundary
+
+        nu = ice%ti2n_u( ti)
+
+        nnz = ice%M_SSADIVA%ptr( nu+1) - ice%M_SSADIVA%ptr( nu)
+        n_neighbours = nnz - 1
+
+        do kk = 1, nnz
+
+          ku = ice%M_SSADIVA%ptr( nu) + kk - 1
+          k  = mesh%M_Neumann_BC_b_CSR%ptr( ti) + kk - 1
+
+          mu = ice%M_SSADIVA%index( ku)
+
+          if (mu == nu) then
+            ! Diagonal: the triangle itself
+            ice%M_SSADIVA%val( ku) = 1._dp
+          else
+            ! Off-diagonal: neighbours
+            ice%M_SSADIVA%val( ku) = 0._dp
+          end if
+
+        end do
+
+        ! Right-hand side and initial guess
+        b_buv(  nu) = 0._dp
+        uv_buv( nu) = u_b( ti)
+
+      case ('infinite')
+        ! Let du/dx = 0 at this domain boundary
+
+        nu = ice%ti2n_u( ti)
+
+        nnz = ice%M_SSADIVA%ptr( nu+1) - ice%M_SSADIVA%ptr( nu)
+        n_neighbours = nnz - 1
+
+        do kk = 1, nnz
+
+          ku = ice%M_SSADIVA%ptr( nu) + kk - 1
+          k  = mesh%M_Neumann_BC_b_CSR%ptr( ti) + kk - 1
+
+          mu = ice%M_SSADIVA%index( ku)
+
+          if (mu == nu) then
+            ! Diagonal: the triangle itself
+            ice%M_SSADIVA%val( ku) = real( n_neighbours,dp)
+          else
+            ! Off-diagonal: neighbours
+            ice%M_SSADIVA%val( ku) = -1._dp
+          end if
+
+        end do
+
+        ! Right-hand side and initial guess
+        b_buv(  nu) = 0._dp
+        uv_buv( nu) = u_b( ti)
+
+    end select
+
+  end subroutine calc_DIVA_matrix_coefficients_eq_1_boundary
+
+  subroutine calc_DIVA_matrix_coefficients_eq_2_boundary( mesh, ice, v_b, ti, b_buv, uv_buv)
+    ! Find the matrix coefficients of equation n and add them to the lists
+
+    implicit none
+
+    ! In- and output variables:
+    type(type_mesh),                                  intent(in)    :: mesh
+    type(type_ice_model),                             intent(inout) :: ice
+    real(dp), dimension(mesh%ti1:mesh%ti2),           intent(in)    :: v_b
+    integer,                                          intent(in)    :: ti
+    real(dp), dimension(2*(mesh%ti1-1)+1:2*mesh%ti2), intent(inout) :: b_buv, uv_buv
+
+    ! Local variables:
+    integer                                                         :: edge_index
+    character(LEN=256)                                              :: BC
+    integer                                                         :: nv, nnz, kk, kv, k, mv, n_neighbours
+
+    edge_index = mesh%Tri_edge_index( ti)
+
+    ! Checks
+    if (C%DIVA_boundary_BC_u_north /= 'zero' .and. &
+        C%DIVA_boundary_BC_u_north /= 'infinite') then
+      call crash('unknown DIVA_boundary_BC_u_north "' // trim( C%DIVA_boundary_BC_u_north) // '"!')
+    end if
+    ! Checks
+    if (C%DIVA_boundary_BC_u_south /= 'zero' .and. &
+        C%DIVA_boundary_BC_u_south /= 'infinite') then
+      call crash('unknown DIVA_boundary_BC_u_south "' // trim( C%DIVA_boundary_BC_u_south) // '"!')
+    end if
+    ! Checks
+    if (C%DIVA_boundary_BC_u_east /= 'zero' .and. &
+        C%DIVA_boundary_BC_u_east /= 'infinite') then
+      call crash('unknown DIVA_boundary_BC_u_east "'  // trim( C%DIVA_boundary_BC_u_east) // '"!')
+    end if
+    ! Checks
+    if (C%DIVA_boundary_BC_u_west /= 'zero' .and. &
+        C%DIVA_boundary_BC_u_west /= 'infinite') then
+      call crash('unknown DIVA_boundary_BC_u_west "'  // trim( C%DIVA_boundary_BC_u_west) // '"!')
+    end if
+
+    ! Determine what kind of edge we are dealing with
+    select case (edge_index)
+      case (8,1,2)
+        ! North
+        if (C%DIVA_boundary_BC_u_north == 'zero') then
+          BC = 'zero'
+        elseif (C%DIVA_boundary_BC_u_north == 'infinite') then
+          BC = 'infinite'
+        end if
+      case (3)
+        ! East
+        if (C%DIVA_boundary_BC_u_east == 'zero') then
+          BC = 'zero'
+        elseif (C%DIVA_boundary_BC_u_east == 'infinite') then
+          BC = 'infinite'
+        end if
+      case (4,5,6)
+        ! South
+        if (C%DIVA_boundary_BC_u_south == 'zero') then
+          BC = 'zero'
+        elseif (C%DIVA_boundary_BC_u_south == 'infinite') then
+          BC = 'infinite'
+        end if
+      case (7)
+        ! West
+        if (C%DIVA_boundary_BC_u_west == 'zero') then
+          BC = 'zero'
+        elseif (C%DIVA_boundary_BC_u_west == 'infinite') then
+          BC = 'infinite'
+        end if
+      case default
+        call crash('invalid edge_index = {int_01} at ti = {int_02}!', int_01 = edge_index, int_02 = ti)
+    end select
+
+    select case (BC)
+
+      case ('zero')
+        ! Let v = 0 at this domain boundary
+
+        nv = ice%ti2n_v( ti)
+
+        nnz = ice%M_SSADIVA%ptr( nv+1) - ice%M_SSADIVA%ptr( nv)
+        n_neighbours = nnz - 1
+
+        do kk = 1, nnz
+
+          kv = ice%M_SSADIVA%ptr(         nv) + kk - 1
+          k  = mesh%M_Neumann_BC_b_CSR%ptr( ti) + kk - 1
+
+          mv = ice%M_SSADIVA%index( kv)
+
+          if (mv == nv) then
+            ! Diagonal: the triangle itself
+            ice%M_SSADIVA%val( kv) = 1._dp
+          else
+            ! Off-diagonal: neighbours
+            ice%M_SSADIVA%val( kv) = 0._dp
+          end if
+
+        end do
+
+      ! Right-hand side and initial guess
+      b_buv(  nv) = 0._dp
+      uv_buv( nv) = v_b( ti)
+
+      case ('infinite')
+        ! Let dv/dx = 0 at this domain boundary
+
+        nv = ice%ti2n_v( ti)
+
+        nnz = ice%M_SSADIVA%ptr( nv+1) - ice%M_SSADIVA%ptr( nv)
+        n_neighbours = nnz - 1
+
+        do kk = 1, nnz
+
+          kv = ice%M_SSADIVA%ptr(         nv) + kk - 1
+          k  = mesh%M_Neumann_BC_b_CSR%ptr( ti) + kk - 1
+
+          mv = ice%M_SSADIVA%index( kv)
+
+          if (mv == nv) then
+            ! Diagonal: the triangle itself
+            ice%M_SSADIVA%val( kv) = real( n_neighbours,dp)
+          else
+            ! Off-diagonal: neighbours
+            ice%M_SSADIVA%val( kv) = -1._dp
+          end if
+
+        end do
+
+        ! Right-hand side and initial guess
+        b_buv(  nv) = 0._dp
+        uv_buv( nv) = v_b( ti)
+
+    end select
+
+  end subroutine calc_DIVA_matrix_coefficients_eq_2_boundary
+
+! ===== Diagnostic =====
+! ======================
+
+  subroutine calc_secondary_velocities( mesh, ice)
+    ! Calculate "secondary" velocities (surface, basal, vertically averaged, on the A-mesh, etc.)
+
+    implicit none
+
+    ! In/output variables:
+    type(type_mesh),              intent(in)    :: mesh
+    type(type_ice_model),         intent(inout) :: ice
+
+    ! Local variables:
+    character(len=256), parameter               :: routine_name = 'calc_secondary_velocities'
+    integer                                     :: ti, vi, k
+    real(dp), dimension(C%nz)                   :: prof
+    real(dp)                                    :: w_sia_u, w_sia_v
+
+    ! Initialisation
+    ! ==============
+
+    ! Add routine to path
+    call init_routine( routine_name)
+
+    ! Different velocity approximations
+    ! =================================
+
+    select case (C%choice_ice_dynamics)
+
+      case ('SIA')
+        ! Pure SIA solution
+
+        ! Set 3D velocity field equal to SIA answer
+        ice%u_3D_b( mesh%ti1:mesh%ti2,:) = ice%u_3D_SIA_b( mesh%ti1:mesh%ti2,:)
+        ice%v_3D_b( mesh%ti1:mesh%ti2,:) = ice%v_3D_SIA_b( mesh%ti1:mesh%ti2,:)
+
+        ! Basal velocity is zero
+        ice%u_base_b( mesh%ti1:mesh%ti2) = 0._dp
+        ice%v_base_b( mesh%ti1:mesh%ti2) = 0._dp
+
+        ! Calculate 3D vertical velocity from 3D horizontal velocities and conservation of mass
+        call calc_3D_vertical_velocities( mesh, ice)
+
+        ! Copy surface velocity from the 3D fields
+        ice%u_surf_b( mesh%ti1:mesh%ti2) = ice%u_3D_b( mesh%ti1:mesh%ti2,1)
+        ice%v_surf_b( mesh%ti1:mesh%ti2) = ice%v_3D_b( mesh%ti1:mesh%ti2,1)
+
+        ! Calculate vertically averaged velocities
+        do ti = mesh%ti1, mesh%ti2
+          prof = ice%u_3D_b( ti,:)
+          call vertical_average( prof, ice%u_vav_b( ti))
+          prof = ice%v_3D_b( ti,:)
+          call vertical_average( prof, ice%v_vav_b( ti))
+        end do
+
+      case ('SSA')
+        ! Pure SSA solution
+
+        ! No vertical variations in velocity; all fields are equal to the SSA answer
+        do ti = mesh%ti1, mesh%ti2
+          ice%u_3D_b(   ti,:) = ice%u_base_SSA_b( ti)
+          ice%v_3D_b(   ti,:) = ice%v_base_SSA_b( ti)
+          ice%u_vav_b(  ti  ) = ice%u_base_SSA_b( ti)
+          ice%v_vav_b(  ti  ) = ice%v_base_SSA_b( ti)
+          ice%u_surf_b( ti  ) = ice%u_base_SSA_b( ti)
+          ice%v_surf_b( ti  ) = ice%v_base_SSA_b( ti)
+          ice%u_base_b( ti  ) = ice%u_base_SSA_b( ti)
+          ice%v_base_b( ti  ) = ice%v_base_SSA_b( ti)
+        end do
+
+        ! No vertical velocity
+        ice%w_3D_a( mesh%vi1:mesh%vi2,:) = 0._dp
+
+      case ('SIA/SSA')
+        ! Hybrid SIA/SSA solution
+
+        ! Set basal velocity equal to SSA answer
+        ice%u_base_b( mesh%ti1:mesh%ti2) = ice%u_base_SSA_b( mesh%ti1:mesh%ti2)
+        ice%v_base_b( mesh%ti1:mesh%ti2) = ice%v_base_SSA_b( mesh%ti1:mesh%ti2)
+
+        ! Set 3-D velocities equal to the SIA solution
+        ice%u_3D_b( mesh%ti1:mesh%ti2,:) = ice%u_3D_SIA_b( mesh%ti1:mesh%ti2,:)
+        ice%v_3D_b( mesh%ti1:mesh%ti2,:) = ice%v_3D_SIA_b( mesh%ti1:mesh%ti2,:)
+
+        ! Add the SSA contributions to the 3-D velocities
+        do k = 1, C%nz
+          ice%u_3D_b( mesh%ti1:mesh%ti2,k) = ice%u_3D_b( mesh%ti1:mesh%ti2,k) + ice%u_base_b( mesh%ti1:mesh%ti2)
+          ice%v_3D_b( mesh%ti1:mesh%ti2,k) = ice%v_3D_b( mesh%ti1:mesh%ti2,k) + ice%v_base_b( mesh%ti1:mesh%ti2)
+        end do
+
+        ! Calculate 3D vertical velocity from 3D horizontal velocities and conservation of mass
+        call calc_3D_vertical_velocities( mesh, ice)
+
+        ! Copy surface velocity from the 3D fields
+        ice%u_surf_b( mesh%ti1:mesh%ti2) = ice%u_3D_b( mesh%ti1:mesh%ti2,1)
+        ice%v_surf_b( mesh%ti1:mesh%ti2) = ice%v_3D_b( mesh%ti1:mesh%ti2,1)
+
+        ! Calculate vertically averaged velocities
+        do ti = mesh%ti1, mesh%ti2
+          prof = ice%u_3D_b( ti,:)
+          call vertical_average( prof, ice%u_vav_b( ti))
+          prof = ice%v_3D_b( ti,:)
+          call vertical_average( prof, ice%v_vav_b( ti))
+        end do
+
+      case ('DIVA')
+        ! The DIVA approximation
+
+        ! Calculate basal velocity from depth-averaged solution and basal stress on the b-grid
+        CALL calc_basal_velocities_DIVA( mesh, ice)
+
+        ! Calculate 3-D velocity solution from the DIVA
+        CALL calc_3D_horizontal_velocities_DIVA( mesh, ice)
+
+        ! Copy surface velocity from the 3D fields
+        ice%u_surf_b( mesh%ti1:mesh%ti2) = ice%u_3D_b( mesh%ti1:mesh%ti2,1)
+        ice%v_surf_b( mesh%ti1:mesh%ti2) = ice%v_3D_b( mesh%ti1:mesh%ti2,1)
+
+        ! Calculate 3D vertical velocity from 3D horizontal velocities and conservation of mass
+        CALL calc_3D_vertical_velocities( mesh, ice)
+
+        ! Calculate vertically averaged velocities
+        DO ti = mesh%ti1, mesh%ti2
+          prof = ice%u_3D_b( ti,:)
+          CALL vertical_average( prof, ice%u_vav_b( ti))
+          prof = ice%v_3D_b( ti,:)
+          CALL vertical_average( prof, ice%v_vav_b( ti))
+        END DO
+
+      case default
+        ! Unknown case
+        call crash('unknown choice_ice_dynamics "' // trim( C%choice_ice_dynamics) // '"!')
+
+    end select
+
+    ! Map velocity components to the a-grid
+    call map_velocities_b_to_a_3D( mesh, ice%u_3D_b  , ice%v_3D_b  , ice%u_3D_a  , ice%v_3D_a  )
+    call map_velocities_b_to_a_2D( mesh, ice%u_vav_b , ice%v_vav_b , ice%u_vav_a , ice%v_vav_a )
+    call map_velocities_b_to_a_2D( mesh, ice%u_surf_b, ice%v_surf_b, ice%u_surf_a, ice%v_surf_a)
+    call map_velocities_b_to_a_2D( mesh, ice%u_base_b, ice%v_base_b, ice%u_base_a, ice%v_base_a)
+
+    ! Calculate absolute velocities on the b-grid
+    do ti = mesh%ti1, mesh%ti2
+      ice%uabs_vav_b(  ti) = SQRT( ice%u_vav_b(  ti)**2 + ice%v_vav_b(  ti)**2)
+      ice%uabs_surf_b( ti) = SQRT( ice%u_surf_b( ti)**2 + ice%v_surf_b( ti)**2)
+      ice%uabs_base_b( ti) = SQRT( ice%u_base_b( ti)**2 + ice%v_base_b( ti)**2)
+    end do
+
+    ! Calculate absolute velocities on the a-grid
+    do vi = mesh%vi1, mesh%vi2
+      ice%uabs_vav_a(  vi) = SQRT( ice%u_vav_a(  vi)**2 + ice%v_vav_a(  vi)**2)
+      ice%uabs_surf_a( vi) = SQRT( ice%u_surf_a( vi)**2 + ice%v_surf_a( vi)**2)
+      ice%uabs_base_a( vi) = SQRT( ice%u_base_a( vi)**2 + ice%v_base_a( vi)**2)
+    end do
+
+    ! Finalisation
+    ! ============
+
+    ! Finalise routine path
+    call finalise_routine( routine_name)
+
+  end subroutine calc_secondary_velocities
+
+  subroutine calc_3D_vertical_velocities( mesh, ice)
+    ! Use simple conservation of mass to calculate the vertical velocity w_3D
+
+    implicit none
+
+    ! In- and output variables:
+    type(type_mesh),      intent(in)      :: mesh
+    type(type_ice_model), intent(inout)   :: ice
+
+    ! Local variables:
+    character(len=256), parameter         :: routine_name = 'calc_3D_vertical_velocities'
+    integer                               :: vi, k
+    real(dp), dimension(:  ), allocatable ::  dHi_dx_a,  dHi_dy_a,  dHs_dx_a,  dHs_dy_a
+    real(dp), dimension(:,:), allocatable ::  du_dx_3D_a,  dv_dy_3D_a
+    real(dp)                              :: dHbase_dx, dHbase_dy
+    real(dp)                              :: du_dx_k,   dv_dy_k
+    real(dp)                              :: du_dx_kp1, dv_dy_kp1
+    real(dp)                              :: w1, w2, w3, w4
+
+    ! Initialisation
+    ! ==============
+
+    ! Add routine to path
+    call init_routine( routine_name)
+
+    ! Allocate shared memory
+    allocate( dHi_dx_a  (mesh%vi1:mesh%vi2      ))
+    allocate( dHi_dy_a  (mesh%vi1:mesh%vi2      ))
+    allocate( dHs_dx_a  (mesh%vi1:mesh%vi2      ))
+    allocate( dHs_dy_a  (mesh%vi1:mesh%vi2      ))
+    allocate( du_dx_3D_a(mesh%vi1:mesh%vi2, C%nz))
+    allocate( dv_dy_3D_a(mesh%vi1:mesh%vi2, C%nz))
+
+    ! Gradients and strain rates
+    ! ==========================
+
+    ! Calculate surface & ice thickness gradients
+    call ddx_a_to_a_2D( mesh, ice%Hs_a  , dHs_dx_a  )
+    call ddy_a_to_a_2D( mesh, ice%Hs_a  , dHs_dy_a  )
+    call ddx_a_to_a_2D( mesh, ice%Hi_a  , dHi_dx_a  )
+    call ddy_a_to_a_2D( mesh, ice%Hi_a  , dHi_dy_a  )
+
+    ! Calculate strain rates
+    call ddx_b_to_a_3D( mesh, ice%u_3D_b, du_dx_3D_a)
+    call ddy_b_to_a_3D( mesh, ice%v_3D_b, dv_dy_3D_a)
+
+    ! Integration
+    ! ===========
+
+    ! Integrate over the incompressibility condition to find the vertical velocity profiles
+    do vi = mesh%vi1, mesh%vi2
+
+      if (ice%mask_ice_a( vi) == 0) then
+        cycle
+      end if
+
+      ! Calculate the ice basal surface slope (not the same as bedrock slope when ice is floating!)
+      dHbase_dx = dHs_dx_a( vi) - dHi_dx_a( vi)
+      dHbase_dy = dHs_dy_a( vi) - dHi_dy_a( vi)
+
+      ! Calculate the vertical velocity at the ice base
+      if (ice%mask_sheet_a( vi) == 1) then
+        ice%w_3D_a( vi,C%nz) = (ice%u_3D_a( vi,C%nz) * dHbase_dx) + (ice%v_3D_a( vi,C%nz) * dHbase_dy) + ice%dHb_dt_a( vi)
+      else
+        ice%w_3D_a( vi,C%nz) = (ice%u_3D_a( vi,C%nz) * dHbase_dx) + (ice%v_3D_a( vi,C%nz) * dHbase_dy) ! Should this include the ice thinning rate?
+      end if
+
+      ! The integrant is calculated half way the layer of integration at k+1/2. This integrant is multiplied with the layer thickness and added to the integral
+      ! of all layers below, giving the integral up to and including this layer:
+      do k = C%nz - 1, 1, -1
+
+        du_dx_k   = du_dx_3D_a( vi,k  )
+        du_dx_kp1 = du_dx_3D_a( vi,k+1)
+        dv_dy_k   = dv_dy_3D_a( vi,k  )
+        dv_dy_kp1 = dv_dy_3D_a( vi,k+1)
+
+        w1 = (du_dx_k + du_dx_kp1) / 2._dp
+        w2 = (dv_dy_k + dv_dy_kp1) / 2._dp
+
+        w3 = ((dHs_dx_a( vi) - 0.5_dp * (C%zeta(k+1) + C%zeta(k)) * dHi_dx_a( vi)) / max(0.1_dp, ice%Hi_a( vi))) * &
+             ((ice%u_3D_a( vi,k+1) - ice%u_3D_a( vi,k)) / (C%zeta(k+1) - C%zeta(k)))
+        w4 = ((dHs_dy_a( vi) - 0.5_dp * (C%zeta(k+1) + C%zeta(k)) * dHi_dy_a( vi)) / max(0.1_dp, ice%Hi_a( vi))) * &
+             ((ice%v_3D_a( vi,k+1) - ice%v_3D_a( vi,k)) / (C%zeta(k+1) - C%zeta(k)))
+
+        ice%w_3D_a( vi,k) = ice%w_3D_a( vi,k+1) - ice%Hi_a( vi) * (w1 + w2 + w3 + w4) * (C%zeta(k+1) - C%zeta(k))
+
+      end do ! k = C%nZ - 1, 1, -1
+
+    end do ! vi = mesh%v1, mesh%v2
+
+    ! Surface and base
+    ! ================
+
+    do vi = mesh%vi1, mesh%vi2
+      ! Surface and basal vertical velocities
+      ice%w_surf_a( vi) = ice%w_3D_a( vi,1   )
+      ice%w_base_a( vi) = ice%w_3D_a( vi,C%nz)
+    end do
+
+    ! Finalisation
+    ! ============
+
+    ! Clean up after yourself
+    deallocate( dHi_dx_a  )
+    deallocate( dHi_dy_a  )
+    deallocate( dHs_dx_a  )
+    deallocate( dHs_dy_a  )
+    deallocate( du_dx_3D_a)
+    deallocate( dv_dy_3D_a)
+
+    ! Finalise routine path
+    call finalise_routine( routine_name)
+
+  end subroutine calc_3D_vertical_velocities
+
   SUBROUTINE calc_basal_velocities_DIVA( mesh, ice)
     ! Calculate basal sliding following Goldberg (2011), Eq. 34
     ! (or it can also be obtained from L19, Eq. 32 given ub*beta=taub)
@@ -1072,6 +1787,7 @@ contains
     CALL finalise_routine( routine_name)
 
   END SUBROUTINE calc_basal_velocities_DIVA
+
   SUBROUTINE calc_3D_horizontal_velocities_DIVA( mesh, ice)
     ! Calculate the 3D horizontal velocity field (following Lipscomb et al., 2019, Eq. 29)
 
@@ -1127,679 +1843,96 @@ contains
 
   END SUBROUTINE calc_3D_horizontal_velocities_DIVA
 
-  ! Routines for solving the "linearised" SSA/DIVA
-  SUBROUTINE solve_SSADIVA_linearised( mesh, ice, u_b, v_b)
-    ! Solve the "linearised" version of the SSA (i.e. assuming viscosity and basal stress are
-    ! constant rather than functions of velocity) on the b-grid.
-    !
-    ! The full SSA reads:
-    !
-    !   d/dx[ 2N (2*du/dx + dv/dy)] + d/dy[ N (du/dy + dv/dx)] - beta*u = -taud_x
-    !   d/dy[ 2N (2*dv/dy + du/dx)] + d/dx[ N (dv/dx + du/dy)] - beta*v = -taud_y
-    !
-    ! Using the chain rule, this expands to:
-    !
-    !   4*N*d2u/dx2 + 4*dN/dx*du/dx + 2*N*d2v/dxdy + 2*dN/dx*dv/dy + N*d2u/dy2 + dN/dy*du/dy + N*d2v/dxdy + dN/dy*dv/dx - beta*u = -taud_x
-    !   4*N*d2v/dy2 + 4*dN/dy*dv/dy + 2*N*d2u/dxdy + 2*dN/dy*du/dx + N*d2v/dx2 + dN/dx*dv/dx + N*d2u/dxdy + dN/dx*du/dy - beta*v = -taud_y
-    !
-    ! Optionally, this can be simplified by neglecting all the "cross-terms" involving gradients of N:
-    !
-    !   4*N*d2u/dx2 + N*d2u/dy2 + 3*N*d2v/dxdy - beta*u = -taud_x
-    !   4*N*d2v/dy2 + N*d2v/dx2 + 3*N*d2u/dxdy - beta*v = -taud_y
-    !
-    ! The left and right sides of these equations can then be divided by N to yield:
-    !
-    ! 4*d2u/dx2 + d2u/dy2 + 3*d2v/dxdy - beta*u/N = -taud_x/N
-    ! 4*d2v/dy2 + d2v/dx2 + 3*d2u/dxdy - beta*v/N = -taud_y/N
-    !
-    ! By happy coincidence, this equation is much easier to solve, especially because (for unclear reasons)
-    ! it doesn't require N to be defined on a staggered grid relative to u,v in order to achieve a stable solution.
+! ===== Auxiliary =====
+! =====================
 
-    IMPLICIT NONE
-
-    ! In- and output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    TYPE(type_ice_model),                INTENT(INOUT) :: ice
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2), INTENT(INOUT) :: u_b
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2), INTENT(INOUT) :: v_b
-
-    ! Local variables:
-    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'solve_SSADIVA_linearised'
-    INTEGER                                            :: ti, nu, nv, t21,t22, pti1, pti2
-    REAL(dp), DIMENSION(:    ), allocatable            ::  N_b,  dN_dx_b,  dN_dy_b
-    REAL(dp), DIMENSION(:    ), allocatable            ::  b_buv,  uv_buv
-
-    ! Add routine to path
-    CALL init_routine( routine_name)
-
-    !(dividable by 2) ranges for b_buv,uv_buv
-    t21 = 1+2*(mesh%ti1-1)
-    t22 =   2*(mesh%ti2)
-
-    ! Allocate shared memory
-    allocate( N_b    (   mesh%ti1:mesh%ti2))
-    allocate( dN_dx_b(   mesh%ti1:mesh%ti2))
-    allocate( dN_dy_b(   mesh%ti1:mesh%ti2))
-    allocate( b_buv  (        t21:     t22))
-    allocate( uv_buv (        t21:     t22))
-
-
-    ! PETSc ranges for b_buv,uv_buv
-    call partition_list(mesh%nTri*2, par%i, par%n, pti1, pti2)
-
-    ! Calculate N, dN/dx, and dN/dy on the b-grid
-    CALL map_a_to_b_2D( mesh, ice%N_a, N_b    )
-    CALL ddx_a_to_b_2D( mesh, ice%N_a, dN_dx_b)
-    CALL ddy_a_to_b_2D( mesh, ice%N_a, dN_dy_b)
-
-  ! Fill in the coefficients of the stiffness matrix
-  ! ================================================
-
-    DO ti = mesh%ti1, mesh%ti2
-
-      IF (mesh%Tri_edge_index( ti) == 0) THEN
-        ! Free triangle: fill in matrix row for the SSA/DIVA
-        IF (C%include_SSADIVA_crossterms) THEN
-          CALL calc_DIVA_matrix_coefficients_eq_1_free( mesh, ice, u_b, ti, N_b, dN_dx_b, dN_dy_b, b_buv, uv_buv)
-          CALL calc_DIVA_matrix_coefficients_eq_2_free( mesh, ice, u_b, ti, N_b, dN_dx_b, dN_dy_b, b_buv, uv_buv)
-        ELSE
-          CALL calc_DIVA_matrix_coefficients_eq_1_free_sans( mesh, ice, u_b, ti, N_b, b_buv, uv_buv)
-          CALL calc_DIVA_matrix_coefficients_eq_2_free_sans( mesh, ice, u_b, ti, N_b, b_buv, uv_buv)
-        END IF
-      ELSE
-        ! Border triangle: apply boundary conditions
-        CALL calc_DIVA_matrix_coefficients_eq_1_boundary( mesh, ice, u_b, ti, b_buv, uv_buv)
-        CALL calc_DIVA_matrix_coefficients_eq_2_boundary( mesh, ice, u_b, ti, b_buv, uv_buv)
-      END IF
-
-    END DO
-
-  ! Solve the matrix equation
-  ! =========================
-
-    ! TODO: The problem: b_buv and uv_buv are divideable by two but, petsc doesnt know that and
-    ! will divide 6 into 3:3 for two procs for example, whereas the division should be 2:4 here in that case.
-    ! Solution: point-to-point communication of boundaries, or fixing it in petsc (possible, but hard)
-
-    CALL solve_matrix_equation_CSR( ice%M_SSADIVA, b_buv, uv_buv, &
-      C%DIVA_choice_matrix_solver, &
-      C%DIVA_SOR_nit             , &
-      C%DIVA_SOR_tol             , &
-      C%DIVA_SOR_omega           , &
-      C%DIVA_PETSc_rtol          , &
-      C%DIVA_PETSc_abstol)
-
-    call check_for_nan(uv_buv(t21:t22), "uv_buv")
-
-  ! Get solution back on the b-grid
-  ! ================================
-
-    DO ti = mesh%ti1, mesh%ti2
-
-      nu = 2*ti - 1
-      nv = 2*ti
-
-      u_b( ti) = uv_buv( nu)
-      v_b( ti) = uv_buv( nv)
-
-    END DO
-
-    ! Clean up after yourself
-    deallocate( N_b    )
-    deallocate( dN_dx_b)
-    deallocate( dN_dy_b)
-    deallocate( b_buv  )
-    deallocate( uv_buv )
-
-    call check_for_nan(u_b, "u_b")
-    call check_for_nan(v_b, "v_b")
-
-    ! Finalise routine path
-    CALL finalise_routine( routine_name)
-
-  END SUBROUTINE solve_SSADIVA_linearised
-  SUBROUTINE calc_DIVA_matrix_coefficients_eq_1_free(      mesh, ice, u_b, ti, N_b, dN_dx_b, dN_dy_b, b_buv, uv_buv)
-    ! Find the matrix coefficients of equation n and add them to the lists
-    !
-    !   4*N*d2u/dx2 + 4*dN/dx*du/dx + 2*N*d2v/dxdy + 2*dN/dx*dv/dy + N*d2u/dy2 + dN/dy*du/dy + N*d2v/dxdy + dN/dy*dv/dx - beta*u = -taud_x
-
-    IMPLICIT NONE
-
-    ! In- and output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    TYPE(type_ice_model),                INTENT(INOUT) :: ice
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2)          , INTENT(IN)    :: u_b
-    INTEGER                                         , INTENT(IN)    :: ti
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2)          , INTENT(IN)    :: N_b, dN_dx_b, dN_dy_b
-    REAL(dp), DIMENSION(2*(mesh%ti1-1)+1:2*mesh%ti2), INTENT(INOUT) :: b_buv, uv_buv
-
-    ! Local variables:
-    INTEGER                                            :: nu, nnz, kk, ku, kv, k, mu
-
-    nu = ice%ti2n_u( ti)
-
-    nnz = (ice%M_SSADIVA%ptr( nu+1) - ice%M_SSADIVA%ptr( nu)) / 2
-
-    DO kk = 1, nnz
-
-      ku = ice%M_SSADIVA%ptr(   nu) + 2*kk - 2
-      kv = ice%M_SSADIVA%ptr(   nu) + 2*kk - 1
-      k  = mesh%M2_ddx_b_b_CSR%ptr( ti) +   kk - 1
-
-      mu = ice%M_SSADIVA%index(   ku)
-
-      ! u-part
-      ice%M_SSADIVA%val( ku) = 4._dp * N_b(     ti) * mesh%M2_d2dx2_b_b_CSR%val( k) + &
-                               4._dp * dN_dx_b( ti) * mesh%M2_ddx_b_b_CSR%val(   k) + &
-                               1._dp * N_b(     ti) * mesh%M2_d2dy2_b_b_CSR%val( k) + &
-                               1._dp * dN_dy_b( ti) * mesh%M2_ddy_b_b_CSR%val(   k)
-
-      ! Sliding term on the diagonal
-      IF (mu == nu) THEN
-        ice%M_SSADIVA%val( ku) = ice%M_SSADIVA%val( ku) - ice%beta_eff_b( ti)
-      END IF
-
-      ! v-part
-      ice%M_SSADIVA%val( kv) = 3._dp * N_b(     ti) * mesh%M2_d2dxdy_b_b_CSR%val( k) + &
-                               2._dp * dN_dx_b( ti) * mesh%M2_ddy_b_b_CSR%val(    k) + &
-                               1._dp * dN_dy_b( ti) * mesh%M2_ddx_b_b_CSR%val(    k)
-
-    END DO
-
-    ! Right-hand side and initial guess
-    b_buv(  nu) = -ice%taudx_b( ti)
-    uv_buv( nu) = u_b( ti)
-
-  END SUBROUTINE calc_DIVA_matrix_coefficients_eq_1_free
-  SUBROUTINE calc_DIVA_matrix_coefficients_eq_2_free(      mesh, ice, v_b, ti, N_b, dN_dx_b, dN_dy_b, b_buv, uv_buv)
-    ! Find the matrix coefficients of equation n and add them to the lists
-    !
-    !   4*N*d2v/dy2 + 4*dN/dy*dv/dy + 2*N*d2u/dxdy + 2*dN/dy*du/dx + N*d2v/dx2 + dN/dx*dv/dx + N*d2u/dxdy + dN/dx*du/dy - beta*v = -taud_y
-
-    IMPLICIT NONE
-
-    ! In- and output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    TYPE(type_ice_model),                INTENT(INOUT) :: ice
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2)          , INTENT(IN)    :: v_b
-    INTEGER                                         , INTENT(IN)    :: ti
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2)          , INTENT(IN)    :: N_b, dN_dx_b, dN_dy_b
-    REAL(dp), DIMENSION(2*(mesh%ti1-1)+1:2*mesh%ti2), INTENT(INOUT) :: b_buv, uv_buv
-
-    ! Local variables:
-    INTEGER                                            :: nv, nnz, kk, ku, kv, k, mv
-
-    nv = ice%ti2n_v( ti)
-
-    nnz = (ice%M_SSADIVA%ptr( nv+1) - ice%M_SSADIVA%ptr( nv)) / 2
-
-    DO kk = 1, nnz
-
-      ku = ice%M_SSADIVA%ptr(   nv) + 2*kk - 2
-      kv = ice%M_SSADIVA%ptr(   nv) + 2*kk - 1
-      k  = mesh%M2_ddx_b_b_CSR%ptr( ti) +   kk - 1
-
-      mv = ice%M_SSADIVA%index(   kv)
-
-      ! v-part
-      ice%M_SSADIVA%val( kv) = 4._dp * N_b(     ti) * mesh%M2_d2dy2_b_b_CSR%val( k) + &
-                               4._dp * dN_dy_b( ti) * mesh%M2_ddy_b_b_CSR%val(   k) + &
-                               1._dp * N_b(     ti) * mesh%M2_d2dx2_b_b_CSR%val( k) + &
-                               1._dp * dN_dx_b( ti) * mesh%M2_ddx_b_b_CSR%val(   k)
-
-      ! Sliding term on the diagonal
-      IF (mv == nv) THEN
-        ice%M_SSADIVA%val( kv) = ice%M_SSADIVA%val( kv) - ice%beta_eff_b( ti)
-      END IF
-
-      ! u-part
-      ice%M_SSADIVA%val( ku) = 3._dp * N_b(     ti) * mesh%M2_d2dxdy_b_b_CSR%val( k) + &
-                               2._dp * dN_dy_b( ti) * mesh%M2_ddx_b_b_CSR%val(    k) + &
-                               1._dp * dN_dx_b( ti) * mesh%M2_ddy_b_b_CSR%val(    k)
-
-    END DO
-
-    ! Right-hand side and initial guess
-    b_buv(  nv) = -ice%taudy_b( ti)
-    uv_buv( nv) = v_b( ti)
-
-  END SUBROUTINE calc_DIVA_matrix_coefficients_eq_2_free
-  SUBROUTINE calc_DIVA_matrix_coefficients_eq_1_free_sans( mesh, ice, u_b, ti, N_b, b_buv, uv_buv)
-    ! Find the matrix coefficients of equation n and add them to the lists
-    !
-    ! 4*d2u/dx2 + d2u/dy2 + 3*d2v/dxdy - beta*u/N = -taud_x/N
-
-    IMPLICIT NONE
-
-    ! In- and output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    TYPE(type_ice_model),                INTENT(INOUT) :: ice
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2)          , INTENT(IN)    :: u_b
-    INTEGER                                         , INTENT(IN)    :: ti
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2)          , INTENT(IN)    :: N_b
-    REAL(dp), DIMENSION(2*(mesh%ti1-1)+1:2*mesh%ti2), INTENT(INOUT) :: b_buv, uv_buv
-
-    ! Local variables:
-    INTEGER                                            :: nu, nnz, kk, ku, kv, k, mu
-
-    nu = ice%ti2n_u( ti)
-
-    nnz = (ice%M_SSADIVA%ptr( nu+1) - ice%M_SSADIVA%ptr( nu)) / 2
-
-    DO kk = 1, nnz
-
-      ku = ice%M_SSADIVA%ptr(   nu) + 2*kk - 2
-      kv = ice%M_SSADIVA%ptr(   nu) + 2*kk - 1
-      k  = mesh%M2_ddx_b_b_CSR%ptr( ti) +   kk - 1
-
-      mu = ice%M_SSADIVA%index(   ku)
-
-      ! u-part
-      ice%M_SSADIVA%val( ku) = 4._dp * mesh%M2_d2dx2_b_b_CSR%val( k) + mesh%M2_d2dy2_b_b_CSR%val( k)
-
-      ! Sliding term on the diagonal
-      IF (mu == nu) THEN
-        ice%M_SSADIVA%val( ku) = ice%M_SSADIVA%val( ku) - (ice%beta_eff_b( ti) / N_b( ti))
-      END IF
-
-      ! v-part
-      ice%M_SSADIVA%val( kv) = 3._dp * mesh%M2_d2dxdy_b_b_CSR%val( k)
-
-    END DO
-
-    ! Right-hand side and initial guess
-    b_buv(  nu) = -ice%taudx_b( ti) / N_b( ti)
-    uv_buv( nu) = u_b( ti)
-
-  END SUBROUTINE calc_DIVA_matrix_coefficients_eq_1_free_sans
-  SUBROUTINE calc_DIVA_matrix_coefficients_eq_2_free_sans( mesh, ice, v_b, ti, N_b, b_buv, uv_buv)
-    ! Find the matrix coefficients of equation n and add them to the lists
-    !
-    ! 4*d2v/dy2 + d2v/dx2 + 3*d2u/dxdy - beta*v/N = -taud_y/N
-
-    IMPLICIT NONE
-
-    ! In- and output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    TYPE(type_ice_model),                INTENT(INOUT) :: ice
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2)          , INTENT(IN)    :: v_b
-    INTEGER                                         , INTENT(IN)    :: ti
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2)          , INTENT(IN)    :: N_b
-    REAL(dp), DIMENSION(2*(mesh%ti1-1)+1:2*mesh%ti2), INTENT(INOUT) :: b_buv, uv_buv
-
-    ! Local variables:
-    INTEGER                                            :: nv, nnz, kk, ku, kv, k, mv
-
-    nv = ice%ti2n_v( ti)
-
-    nnz = (ice%M_SSADIVA%ptr( nv+1) - ice%M_SSADIVA%ptr( nv)) / 2
-
-    DO kk = 1, nnz
-
-      ku = ice%M_SSADIVA%ptr(   nv) + 2*kk - 2
-      kv = ice%M_SSADIVA%ptr(   nv) + 2*kk - 1
-      k  = mesh%M2_ddx_b_b_CSR%ptr( ti) +   kk - 1
-
-      mv = ice%M_SSADIVA%index(   kv)
-
-      ! v-part
-      ice%M_SSADIVA%val( kv) = 4._dp * mesh%M2_d2dy2_b_b_CSR%val( k) + mesh%M2_d2dx2_b_b_CSR%val( k)
-
-      ! Sliding term on the diagonal
-      IF (mv == nv) THEN
-        ice%M_SSADIVA%val( kv) = ice%M_SSADIVA%val( kv) - (ice%beta_eff_b( ti) / N_b( ti))
-      END IF
-
-      ! u-part
-      ice%M_SSADIVA%val( ku) = 3._dp * mesh%M2_d2dxdy_b_b_CSR%val( k)
-
-    END DO
-
-    ! Right-hand side and initial guess
-    b_buv(  nv) = -ice%taudy_b( ti) / N_b( ti)
-    uv_buv( nv) = v_b( ti)
-
-  END SUBROUTINE calc_DIVA_matrix_coefficients_eq_2_free_sans
-  SUBROUTINE calc_DIVA_matrix_coefficients_eq_1_boundary(  mesh, ice, u_b, ti, b_buv, uv_buv)
-    ! Find the matrix coefficients of equation n and add them to the lists
-
-    IMPLICIT NONE
-
-    ! In- and output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    TYPE(type_ice_model),                INTENT(INOUT) :: ice
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2)          , INTENT(IN)    :: u_b
-    INTEGER                                         , INTENT(IN)    :: ti
-    REAL(dp), DIMENSION(2*(mesh%ti1-1)+1:2*mesh%ti2), INTENT(INOUT) :: b_buv, uv_buv
-
-    ! Local variables:
-    INTEGER                                            :: edge_index
-    CHARACTER(LEN=256)                                 :: BC
-    INTEGER                                            :: nu, nnz, kk, ku, k, mu, n_neighbours
-
-    edge_index = mesh%Tri_edge_index( ti)
-
-    ! Determine what kind of boundary conditions to apply
-    IF     (edge_index == 8 .OR. edge_index == 1 .OR. edge_index == 2) THEN
-      ! North
-      IF     (C%DIVA_boundary_BC_u_north == 'zero') THEN
-        BC = 'zero'
-      ELSEIF (C%DIVA_boundary_BC_u_north == 'infinite') THEN
-        BC = 'infinite'
-      ELSE
-        CALL crash('unknown DIVA_boundary_BC_u_north "' // TRIM( C%DIVA_boundary_BC_u_north) // '"!')
-      END IF
-    ELSEIF (edge_index == 3) THEN
-      ! East
-      IF     (C%DIVA_boundary_BC_u_east == 'zero') THEN
-        BC = 'zero'
-      ELSEIF (C%DIVA_boundary_BC_u_east == 'infinite') THEN
-        BC = 'infinite'
-      ELSE
-        CALL crash('unknown DIVA_boundary_BC_u_east "' // TRIM( C%DIVA_boundary_BC_u_east) // '"!')
-      END IF
-    ELSEIF (edge_index == 4 .OR. edge_index == 5 .OR. edge_index == 6) THEN
-      ! South
-      IF     (C%DIVA_boundary_BC_u_south == 'zero') THEN
-        BC = 'zero'
-      ELSEIF (C%DIVA_boundary_BC_u_south == 'infinite') THEN
-        BC = 'infinite'
-      ELSE
-        CALL crash('unknown DIVA_boundary_BC_u_south "' // TRIM( C%DIVA_boundary_BC_u_south) // '"!')
-      END IF
-    ELSEIF (edge_index == 7) THEN
-      ! West
-      IF     (C%DIVA_boundary_BC_u_west == 'zero') THEN
-        BC = 'zero'
-      ELSEIF (C%DIVA_boundary_BC_u_west == 'infinite') THEN
-        BC = 'infinite'
-      ELSE
-        CALL crash('unknown DIVA_boundary_BC_u_west "' // TRIM( C%DIVA_boundary_BC_u_west) // '"!')
-      END IF
-    ELSE
-      CALL crash('invaled edge_index = {int_01} at ti = {int_02}!', int_01 = edge_index, int_02 = ti)
-    END IF
-
-    IF (BC == 'zero') THEN
-      ! Let u = 0 at this domain boundary
-
-      nu = ice%ti2n_u( ti)
-
-      nnz = ice%M_SSADIVA%ptr( nu+1) - ice%M_SSADIVA%ptr( nu)
-      n_neighbours = nnz - 1
-
-      DO kk = 1, nnz
-
-        ku = ice%M_SSADIVA%ptr(         nu) + kk - 1
-        k  = mesh%M_Neumann_BC_b_CSR%ptr( ti) + kk - 1
-
-        mu = ice%M_SSADIVA%index( ku)
-
-        IF (mu == nu) THEN
-          ! Diagonal: the triangle itself
-          ice%M_SSADIVA%val( ku) = 1._dp
-        ELSE
-          ! Off-diagonal: neighbours
-          ice%M_SSADIVA%val( ku) = 0._dp
-        END IF
-
-      END DO
-
-      ! Right-hand side and initial guess
-      b_buv(  nu) = 0._dp
-      uv_buv( nu) = u_b( ti)
-
-    ELSEIF (BC == 'infinite') THEN
-      ! Let du/dx = 0 at this domain boundary
-
-      nu = ice%ti2n_u( ti)
-
-      nnz = ice%M_SSADIVA%ptr( nu+1) - ice%M_SSADIVA%ptr( nu)
-      n_neighbours = nnz - 1
-
-      DO kk = 1, nnz
-
-        ku = ice%M_SSADIVA%ptr(         nu) + kk - 1
-        k  = mesh%M_Neumann_BC_b_CSR%ptr( ti) + kk - 1
-
-        mu = ice%M_SSADIVA%index( ku)
-
-        IF (mu == nu) THEN
-          ! Diagonal: the triangle itself
-          ice%M_SSADIVA%val( ku) = REAL( n_neighbours,dp)
-        ELSE
-          ! Off-diagonal: neighbours
-          ice%M_SSADIVA%val( ku) = -1._dp
-        END IF
-
-      END DO
-
-      ! Right-hand side and initial guess
-      b_buv(  nu) = 0._dp
-      uv_buv( nu) = u_b( ti)
-
-    ELSE
-      CALL crash('invalid BC = "' // TRIM( BC) // '"!')
-    END IF
-
-  END SUBROUTINE calc_DIVA_matrix_coefficients_eq_1_boundary
-  SUBROUTINE calc_DIVA_matrix_coefficients_eq_2_boundary(  mesh, ice, v_b, ti, b_buv, uv_buv)
-    ! Find the matrix coefficients of equation n and add them to the lists
-
-    IMPLICIT NONE
-
-    ! In- and output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    TYPE(type_ice_model),                INTENT(INOUT) :: ice
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2)          , INTENT(IN)    :: v_b
-    INTEGER                                         , INTENT(IN)    :: ti
-    REAL(dp), DIMENSION(2*(mesh%ti1-1)+1:2*mesh%ti2), INTENT(INOUT) :: b_buv, uv_buv
-
-    ! Local variables:
-    INTEGER                                            :: edge_index
-    CHARACTER(LEN=256)                                 :: BC
-    INTEGER                                            :: nv, nnz, kk, kv, k, mv, n_neighbours
-
-    edge_index = mesh%Tri_edge_index( ti)
-
-    ! Determine what kind of boundary conditions to apply
-    IF     (edge_index == 8 .OR. edge_index == 1 .OR. edge_index == 2) THEN
-      ! North
-      IF     (C%DIVA_boundary_BC_v_north == 'zero') THEN
-        BC = 'zero'
-      ELSEIF (C%DIVA_boundary_BC_v_north == 'infinite') THEN
-        BC = 'infinite'
-      ELSE
-        CALL crash('unknown DIVA_boundary_BC_v_north "' // TRIM( C%DIVA_boundary_BC_v_north) // '"!')
-      END IF
-    ELSEIF (edge_index == 3) THEN
-      ! East
-      IF     (C%DIVA_boundary_BC_v_east == 'zero') THEN
-        BC = 'zero'
-      ELSEIF (C%DIVA_boundary_BC_v_east == 'infinite') THEN
-        BC = 'infinite'
-      ELSE
-        CALL crash('unknown DIVA_boundary_BC_v_east "' // TRIM( C%DIVA_boundary_BC_v_east) // '"!')
-      END IF
-    ELSEIF (edge_index == 4 .OR. edge_index == 5 .OR. edge_index == 6) THEN
-      ! South
-      IF     (C%DIVA_boundary_BC_v_south == 'zero') THEN
-        BC = 'zero'
-      ELSEIF (C%DIVA_boundary_BC_v_south == 'infinite') THEN
-        BC = 'infinite'
-      ELSE
-        CALL crash('unknown DIVA_boundary_BC_v_south "' // TRIM( C%DIVA_boundary_BC_v_south) // '"!')
-      END IF
-    ELSEIF (edge_index == 7) THEN
-      ! West
-      IF     (C%DIVA_boundary_BC_v_west == 'zero') THEN
-        BC = 'zero'
-      ELSEIF (C%DIVA_boundary_BC_v_west == 'infinite') THEN
-        BC = 'infinite'
-      ELSE
-        CALL crash('unknown DIVA_boundary_BC_v_west "' // TRIM( C%DIVA_boundary_BC_v_west) // '"!')
-      END IF
-    ELSE
-      CALL crash('invalid edge_index = {int_01} at ti = {int_02}', int_01 = edge_index, int_02 = ti)
-    END IF
-
-    IF (BC == 'zero') THEN
-      ! Let v = 0 at this domain boundary
-
-      nv = ice%ti2n_v( ti)
-
-      nnz = ice%M_SSADIVA%ptr( nv+1) - ice%M_SSADIVA%ptr( nv)
-      n_neighbours = nnz - 1
-
-      DO kk = 1, nnz
-
-        kv = ice%M_SSADIVA%ptr(         nv) + kk - 1
-        k  = mesh%M_Neumann_BC_b_CSR%ptr( ti) + kk - 1
-
-        mv = ice%M_SSADIVA%index( kv)
-
-        IF (mv == nv) THEN
-          ! Diagonal: the triangle itself
-          ice%M_SSADIVA%val( kv) = 1._dp
-        ELSE
-          ! Off-diagonal: neighbours
-          ice%M_SSADIVA%val( kv) = 0._dp
-        END IF
-
-      END DO
-
-      ! Right-hand side and initial guess
-      b_buv(  nv) = 0._dp
-      uv_buv( nv) = v_b( ti)
-
-    ELSEIF (BC == 'infinite') THEN
-      ! Let dv/dx = 0 at this domain boundary
-
-      nv = ice%ti2n_v( ti)
-
-      nnz = ice%M_SSADIVA%ptr( nv+1) - ice%M_SSADIVA%ptr( nv)
-      n_neighbours = nnz - 1
-
-      DO kk = 1, nnz
-
-        kv = ice%M_SSADIVA%ptr(         nv) + kk - 1
-        k  = mesh%M_Neumann_BC_b_CSR%ptr( ti) + kk - 1
-
-        mv = ice%M_SSADIVA%index( kv)
-
-        IF (mv == nv) THEN
-          ! Diagonal: the triangle itself
-          ice%M_SSADIVA%val( kv) = REAL( n_neighbours,dp)
-        ELSE
-          ! Off-diagonal: neighbours
-          ice%M_SSADIVA%val( kv) = -1._dp
-        END IF
-
-      END DO
-
-      ! Right-hand side and initial guess
-      b_buv(  nv) = 0._dp
-      uv_buv( nv) = v_b( ti)
-
-    ELSE
-      CALL crash('invalid BC = "' // TRIM(BC) // '"!')
-    END IF
-
-  END SUBROUTINE calc_DIVA_matrix_coefficients_eq_2_boundary
-
-  ! Some "administration" routines that help speed up and stabilise the SSA/DIVA solver
-  SUBROUTINE apply_velocity_limits( mesh, u_b, v_b)
+  subroutine apply_velocity_limits( mesh, u_b, v_b)
     ! Apply a velocity limit (for stability)
 
-    IMPLICIT NONE
+    implicit none
 
     ! In/output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2),          INTENT(INOUT) :: u_b, v_b
+    type(type_mesh),                        intent(in)    :: mesh
+    real(dp), dimension(mesh%ti1:mesh%ti2), intent(inout) :: u_b, v_b
 
     ! Local variables:
-    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'apply_velocity_limits'
-    INTEGER                                            :: ti
-    REAL(dp), DIMENSION(:    ), allocatable            ::  uabs_b
+    character(len=256), parameter                         :: routine_name = 'apply_velocity_limits'
+    integer                                               :: ti
+    real(dp)                                              :: uabs_b
 
     ! Add routine to path
-    CALL init_routine( routine_name)
+    call init_routine( routine_name)
 
-    ! Allocate shared memory
-    allocate( uabs_b(mesh%ti1:mesh%ti2))
+    do ti = mesh%ti1, mesh%ti2
 
-    ! Calculate absolute speed
-    DO ti = mesh%ti1, mesh%ti2
-      uabs_b( ti) = SQRT( u_b( ti)**2 + v_b( ti)**2)
-    END DO
+      ! Calculate absolute speed
+      uabs_b = sqrt( u_b( ti)**2 + v_b( ti)**2)
 
-    ! Scale velocities accordingly
-    DO ti = mesh%ti1, mesh%ti2
-      IF (uabs_b( ti) > C%DIVA_vel_max) THEN
-        u_b( ti) = u_b( ti) * C%DIVA_vel_max / uabs_b( ti)
-        v_b( ti) = v_b( ti) * C%DIVA_vel_max / uabs_b( ti)
-      END IF
-    END DO
+      if (uabs_b > C%DIVA_vel_max) then
+        ! Scale velocities accordingly
+        u_b( ti) = u_b( ti) * C%DIVA_vel_max / uabs_b
+        v_b( ti) = v_b( ti) * C%DIVA_vel_max / uabs_b
+      end if
 
-    ! Clean up after yourself
-    deallocate( uabs_b)
+    end do
 
     ! Finalise routine path
-    CALL finalise_routine( routine_name)
+    call finalise_routine( routine_name)
 
-  END SUBROUTINE apply_velocity_limits
-  SUBROUTINE relax_DIVA_visc_iterations( mesh, u_prev_b, v_prev_b, u_b, v_b, rel)
+  end subroutine apply_velocity_limits
+
+  subroutine relax_DIVA_visc_iterations( mesh, u_prev_b, v_prev_b, u_b, v_b, rel)
     ! Relax velocity solution with results of the previous viscosity iteration
 
-    IMPLICIT NONE
+    implicit none
 
     ! In/output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2), INTENT(IN)    :: u_prev_b
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2), INTENT(IN)    :: v_prev_b
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2), INTENT(INOUT) :: u_b
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2), INTENT(INOUT) :: v_b
-    REAL(dp),                            INTENT(IN)    :: rel
+    type(type_mesh),                        intent(in)    :: mesh
+    real(dp), dimension(mesh%ti1:mesh%ti2), intent(in)    :: u_prev_b
+    real(dp), dimension(mesh%ti1:mesh%ti2), intent(in)    :: v_prev_b
+    real(dp), dimension(mesh%ti1:mesh%ti2), intent(inout) :: u_b
+    real(dp), dimension(mesh%ti1:mesh%ti2), intent(inout) :: v_b
+    real(dp),                               intent(in)    :: rel
 
     ! Local variables:
-    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'relax_DIVA_visc_iterations'
-    INTEGER                                            :: ti
+    character(len=256), parameter                         :: routine_name = 'relax_DIVA_visc_iterations'
+    integer                                               :: ti
 
     ! Add routine to path
-    CALL init_routine( routine_name)
+    call init_routine( routine_name)
 
-    DO ti = mesh%ti1, mesh%ti2
+    do ti = mesh%ti1, mesh%ti2
       u_b( ti) = rel * u_b( ti) + (1._dp - rel) * u_prev_b( ti)
       v_b( ti) = rel * v_b( ti) + (1._dp - rel) * v_prev_b( ti)
-    END DO
-    CALL sync
+    end do
 
     ! Finalise routine path
-    CALL finalise_routine( routine_name)
+    call finalise_routine( routine_name)
 
-  END SUBROUTINE relax_DIVA_visc_iterations
-  SUBROUTINE calc_visc_iter_UV_resid( mesh, u_prev_b, v_prev_b, u_b, v_b, resid_UV)
+  end subroutine relax_DIVA_visc_iterations
+
+  subroutine calc_visc_iter_UV_resid( mesh, u_prev_b, v_prev_b, u_b, v_b, resid_UV)
     ! Check if the viscosity iteration has converged to a stable solution
 
-    IMPLICIT NONE
+    implicit none
 
     ! In/output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2), INTENT(IN)    :: u_prev_b
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2), INTENT(IN)    :: v_prev_b
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2), INTENT(INOUT) :: u_b
-    REAL(dp), DIMENSION(mesh%ti1:mesh%ti2), INTENT(INOUT) :: v_b
-    REAL(dp),                            INTENT(OUT)   :: resid_UV
+    type(type_mesh),                        intent(in)    :: mesh
+    real(dp), dimension(mesh%ti1:mesh%ti2), intent(in)    :: u_prev_b
+    real(dp), dimension(mesh%ti1:mesh%ti2), intent(in)    :: v_prev_b
+    real(dp), dimension(mesh%ti1:mesh%ti2), intent(inout) :: u_b
+    real(dp), dimension(mesh%ti1:mesh%ti2), intent(inout) :: v_b
+    real(dp),                               intent(out)   :: resid_UV
 
     ! Local variables:
-    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'calc_visc_iter_UV_resid'
-    INTEGER                                            :: ierr
-    INTEGER                                            :: ti, nti
-    REAL(dp)                                           :: res1, res2
-    REAL(dp), PARAMETER                                :: DIVA_vel_tolerance = 1e-6   ! [m/a] only consider points with velocity above this tolerance limit
+    character(len=256), parameter                         :: routine_name = 'calc_visc_iter_UV_resid'
+    integer                                               :: ierr
+    integer                                               :: ti, nti
+    real(dp)                                              :: res1, res2
+    real(dp), parameter                                   :: DIVA_vel_tolerance = 1e-6   ! [m/a] only consider points with velocity above this tolerance limit
 
     ! Add routine to path
-    CALL init_routine( routine_name)
+    call init_routine( routine_name)
 
     ! Calculate the L2 norm based on velocity solution between previous
     ! and current viscosity iteration (as in Yelmo/SICOPOLIS)
@@ -1808,43 +1941,42 @@ contains
     res1 = 0._dp
     res2 = 0._dp
 
-    DO ti = mesh%ti1, mesh%ti2
+    do ti = mesh%ti1, mesh%ti2
 
-      IF (ABS(u_b( ti)) > DIVA_vel_tolerance) THEN
+      if (abs(u_b( ti)) > DIVA_vel_tolerance) then
         nti = nti + 1
         res1 = res1 + (u_b( ti) - u_prev_b( ti))**2._dp
         res2 = res2 + (u_b( ti) + u_prev_b( ti))**2._dp
-      END IF
+      end if
 
-      IF (ABS(v_b( ti)) > DIVA_vel_tolerance) THEN
+      if (abs(v_b( ti)) > DIVA_vel_tolerance) then
         nti = nti + 1
         res1 = res1 + (v_b( ti) - v_prev_b( ti))**2._dp
         res2 = res2 + (v_b( ti) + v_prev_b( ti))**2._dp
-      END IF
+      end if
 
-    END DO
+    end do
 
     ! Combine results from all processes
-    CALL MPI_ALLREDUCE( MPI_IN_PLACE, nti, 1, MPI_INTEGER,          MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE( MPI_IN_PLACE, res1, 1, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
-    CALL MPI_ALLREDUCE( MPI_IN_PLACE, res2, 1, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
+    call MPI_ALLREDUCE( MPI_IN_PLACE, nti,  1, MPI_INTEGER,          MPI_SUM, MPI_COMM_WORLD, ierr)
+    call MPI_ALLREDUCE( MPI_IN_PLACE, res1, 1, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
+    call MPI_ALLREDUCE( MPI_IN_PLACE, res2, 1, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
 
-    IF (nti > 0) THEN
-      res1 = SQRT( res1)
-      res2 = SQRT( res2 )
-      res2 = MAX(  res2,1E-8_dp)
+    if (nti > 0) then
+      res1 = sqrt( res1)
+      res2 = sqrt( res2)
+      res2 = max( res2, 1E-8_dp)
       resid_UV = 2._dp * res1 / res2
-    ELSE
+    else
       ! No points available for comparison, set residual equal to zero
       resid_UV = 0._dp
-    END IF
+    end if
 
     ! Finalise routine path
-    CALL finalise_routine( routine_name)
+    call finalise_routine( routine_name)
 
-  END SUBROUTINE calc_visc_iter_UV_resid
+  end subroutine calc_visc_iter_UV_resid
 
-  ! Map velocity fields from the b-grid to the a- and c-grids
   SUBROUTINE map_velocities_b_to_a_2D( mesh, u_b, v_b, u_a, v_a)
     ! Map velocity fields from the b-grid to the a-grid
 
@@ -1887,6 +2019,7 @@ contains
     CALL finalise_routine( routine_name)
 
   END SUBROUTINE map_velocities_b_to_a_2D
+
   SUBROUTINE map_velocities_b_to_a_3D( mesh, u_b, v_b, u_a, v_a)
     ! Map velocity fields from the b-grid to the a-grid
 
@@ -1933,6 +2066,7 @@ contains
     CALL finalise_routine( routine_name)
 
   END SUBROUTINE map_velocities_b_to_a_3D
+
   SUBROUTINE map_velocities_b_to_c_2D( mesh, u_b, v_b, u_c, v_c)
     ! Map velocity fields from the b-grid to the c-grid
 
@@ -1985,6 +2119,7 @@ contains
     CALL finalise_routine( routine_name)
 
   END SUBROUTINE map_velocities_b_to_c_2D
+
   SUBROUTINE map_velocities_b_to_c_3D( mesh, u_b, v_b, u_c, v_c)
     ! Map velocity fields from the b-grid to the c-grid
 
@@ -2065,7 +2200,9 @@ contains
 
   END SUBROUTINE map_velocities_b_to_c_3D
 
-  ! Initialise data fields for the velocity solver(s)
+! ===== Initialisation =====
+! ==========================
+
   subroutine initialise_velocity_solver( mesh, ice)
     ! Allocate and initialise data fields for the velocity solver
 
@@ -2489,6 +2626,9 @@ contains
 
   end subroutine initialise_SSADIVA_stiffness_matrix
 
+! ===== Remapping =====
+! =====================
+
   subroutine remap_velocities( mesh_old, mesh_new, map, ice)
     ! Remap or reallocate all the data fields
 
@@ -2577,6 +2717,7 @@ contains
     call reallocate_bounds( ice%v_surf_a,    mesh_new%vi1, mesh_new%vi2 )
     call reallocate_bounds( ice%u_surf_b,    mesh_new%ti1, mesh_new%ti2 )
     call reallocate_bounds( ice%v_surf_b,    mesh_new%ti1, mesh_new%ti2 )
+    call reallocate_bounds( ice%w_surf_a,    mesh_new%vi1, mesh_new%vi2 )
     call reallocate_bounds( ice%uabs_surf_a, mesh_new%vi1, mesh_new%vi2 )
     call reallocate_bounds( ice%uabs_surf_b, mesh_new%ti1, mesh_new%ti2 )
 
@@ -2584,6 +2725,7 @@ contains
     call reallocate_bounds( ice%v_base_a,    mesh_new%vi1, mesh_new%vi2 )
     call reallocate_bounds( ice%u_base_b,    mesh_new%ti1, mesh_new%ti2 )
     call reallocate_bounds( ice%v_base_b,    mesh_new%ti1, mesh_new%ti2 )
+    call reallocate_bounds( ice%w_base_a,    mesh_new%vi1, mesh_new%vi2 )
     call reallocate_bounds( ice%uabs_base_a, mesh_new%vi1, mesh_new%vi2 )
     call reallocate_bounds( ice%uabs_base_b, mesh_new%ti1, mesh_new%ti2 )
 
@@ -2595,23 +2737,23 @@ contains
 
   end subroutine remap_velocities_SIA
 
-  SUBROUTINE remap_velocities_SSA( mesh_old, mesh_new, map, ice)
+  subroutine remap_velocities_SSA( mesh_old, mesh_new, map, ice)
     ! Remap or reallocate all the data fields
 
-    IMPLICIT NONE
+    implicit none
 
     ! In/output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh_old
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh_new
-    TYPE(type_remapping_mesh_mesh),      INTENT(IN)    :: map
-    TYPE(type_ice_model),                INTENT(INOUT) :: ice
+    type(type_mesh),                intent(in)    :: mesh_old
+    type(type_mesh),                intent(in)    :: mesh_new
+    type(type_remapping_mesh_mesh), intent(in)    :: map
+    type(type_ice_model),           intent(inout) :: ice
 
     ! Local variables:
-    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'remap_velocities_SSA'
-    REAL(dp), DIMENSION(:    ), allocatable            ::  u_a,  v_a
+    character(len=256), parameter                 :: routine_name = 'remap_velocities_SSA'
+    real(dp), dimension(:), allocatable           ::  u_a,  v_a
 
     ! Add routine to path
-    CALL init_routine( routine_name)
+    call init_routine( routine_name)
 
     ! == Remap SSA velocities
     ! =======================
@@ -2621,20 +2763,20 @@ contains
     allocate( v_a(mesh_old%vi1:mesh_old%vi2))
 
     ! Map velocities to the a-grid
-    CALL map_b_to_a_2D( mesh_old, ice%u_base_SSA_b, u_a)
-    CALL map_b_to_a_2D( mesh_old, ice%v_base_SSA_b, v_a)
+    call map_b_to_a_2D( mesh_old, ice%u_base_SSA_b, u_a)
+    call map_b_to_a_2D( mesh_old, ice%v_base_SSA_b, v_a)
 
     ! Remap a-grid velocities
-    CALL remap_field_dp_2D( mesh_old, mesh_new, map, u_a, 'cons_2nd_order')
-    CALL remap_field_dp_2D( mesh_old, mesh_new, map, v_a, 'cons_2nd_order')
+    call remap_field_dp_2D( mesh_old, mesh_new, map, u_a, 'cons_2nd_order')
+    call remap_field_dp_2D( mesh_old, mesh_new, map, v_a, 'cons_2nd_order')
 
     ! Reallocate b-grid velocities
     call reallocate_bounds( ice%u_base_SSA_b, mesh_new%ti1, mesh_new%ti2 )
     call reallocate_bounds( ice%v_base_SSA_b, mesh_new%ti1, mesh_new%ti2 )
 
     ! Map remapped velocities to the b-grid
-    CALL map_a_to_b_2D( mesh_new, u_a, ice%u_base_SSA_b)
-    CALL map_a_to_b_2D( mesh_new, u_a, ice%v_base_SSA_b)
+    call map_a_to_b_2D( mesh_new, u_a, ice%u_base_SSA_b)
+    call map_a_to_b_2D( mesh_new, u_a, ice%v_base_SSA_b)
 
     ! Clean up after yourself
     deallocate( u_a )
@@ -2643,70 +2785,69 @@ contains
     ! == Reallocate everything else
     ! =============================
 
-    CALL reallocate_bounds( ice%u_3D_a     ,   mesh_new%vi1, mesh_new%vi2, C%nz )
-    CALL reallocate_bounds( ice%v_3D_a     ,   mesh_new%vi1, mesh_new%vi2, C%nz )
-    CALL reallocate_bounds( ice%u_3D_b     ,   mesh_new%ti1, mesh_new%ti2, C%nz )
-    CALL reallocate_bounds( ice%v_3D_b     ,   mesh_new%ti1, mesh_new%ti2, C%nz )
-    CALL reallocate_bounds( ice%w_3D_a     ,   mesh_new%vi1, mesh_new%vi2, C%nz )
+    call reallocate_bounds( ice%u_3D_a,         mesh_new%vi1, mesh_new%vi2, C%nz )
+    call reallocate_bounds( ice%v_3D_a,         mesh_new%vi1, mesh_new%vi2, C%nz )
+    call reallocate_bounds( ice%u_3D_b,         mesh_new%ti1, mesh_new%ti2, C%nz )
+    call reallocate_bounds( ice%v_3D_b,         mesh_new%ti1, mesh_new%ti2, C%nz )
+    call reallocate_bounds( ice%w_3D_a,         mesh_new%vi1, mesh_new%vi2, C%nz )
 
-    CALL reallocate_bounds( ice%u_vav_a    ,   mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds( ice%v_vav_a    ,   mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds( ice%u_vav_b    ,   mesh_new%ti1, mesh_new%ti2       )
-    CALL reallocate_bounds( ice%v_vav_b    ,   mesh_new%ti1, mesh_new%ti2       )
-    CALL reallocate_bounds( ice%uabs_vav_a ,   mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds( ice%uabs_vav_b ,   mesh_new%ti1, mesh_new%ti2       )
+    call reallocate_bounds( ice%u_vav_a,        mesh_new%vi1, mesh_new%vi2       )
+    call reallocate_bounds( ice%v_vav_a,        mesh_new%vi1, mesh_new%vi2       )
+    call reallocate_bounds( ice%u_vav_b,        mesh_new%ti1, mesh_new%ti2       )
+    call reallocate_bounds( ice%v_vav_b,        mesh_new%ti1, mesh_new%ti2       )
+    call reallocate_bounds( ice%uabs_vav_a,     mesh_new%vi1, mesh_new%vi2       )
+    call reallocate_bounds( ice%uabs_vav_b,     mesh_new%ti1, mesh_new%ti2       )
 
-    CALL reallocate_bounds( ice%u_surf_a   ,   mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds( ice%v_surf_a   ,   mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds( ice%u_surf_b   ,   mesh_new%ti1, mesh_new%ti2       )
-    CALL reallocate_bounds( ice%v_surf_b   ,   mesh_new%ti1, mesh_new%ti2       )
-    CALL reallocate_bounds( ice%uabs_surf_a,   mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds( ice%uabs_surf_b,   mesh_new%ti1, mesh_new%ti2       )
+    call reallocate_bounds( ice%u_surf_a,       mesh_new%vi1, mesh_new%vi2       )
+    call reallocate_bounds( ice%v_surf_a,       mesh_new%vi1, mesh_new%vi2       )
+    call reallocate_bounds( ice%u_surf_b,       mesh_new%ti1, mesh_new%ti2       )
+    call reallocate_bounds( ice%v_surf_b,       mesh_new%ti1, mesh_new%ti2       )
+    call reallocate_bounds( ice%w_surf_a,       mesh_new%vi1, mesh_new%vi2       )
+    call reallocate_bounds( ice%uabs_surf_a,    mesh_new%vi1, mesh_new%vi2       )
+    call reallocate_bounds( ice%uabs_surf_b,    mesh_new%ti1, mesh_new%ti2       )
 
-    CALL reallocate_bounds( ice%u_base_a   ,   mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds( ice%v_base_a   ,   mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds( ice%u_base_b   ,   mesh_new%ti1, mesh_new%ti2       )
-    CALL reallocate_bounds( ice%v_base_b   ,   mesh_new%ti1, mesh_new%ti2       )
-    CALL reallocate_bounds( ice%uabs_base_a,   mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds( ice%uabs_base_b,   mesh_new%ti1, mesh_new%ti2       )
-
-    ! CALL reallocate_shared_dp_2D(   mesh_new%nTri, C%nz           , ice%u_3D_SIA_b            , ice%wu_3D_SIA_b           )
-    ! CALL reallocate_shared_dp_2D(   mesh_new%nTri, C%nz           , ice%v_3D_SIA_b            , ice%wv_3D_SIA_b           )
+    call reallocate_bounds( ice%u_base_a,       mesh_new%vi1, mesh_new%vi2       )
+    call reallocate_bounds( ice%v_base_a,       mesh_new%vi1, mesh_new%vi2       )
+    call reallocate_bounds( ice%u_base_b,       mesh_new%ti1, mesh_new%ti2       )
+    call reallocate_bounds( ice%v_base_b,       mesh_new%ti1, mesh_new%ti2       )
+    call reallocate_bounds( ice%w_base_a,       mesh_new%vi1, mesh_new%vi2       )
+    call reallocate_bounds( ice%uabs_base_a,    mesh_new%vi1, mesh_new%vi2       )
+    call reallocate_bounds( ice%uabs_base_b,    mesh_new%ti1, mesh_new%ti2       )
 
     ! Physical terms in the SSA/DIVA
-    CALL reallocate_bounds(  ice%taudx_b       ,mesh_new%ti1, mesh_new%ti2       )
-    CALL reallocate_bounds(  ice%taudy_b       ,mesh_new%ti1, mesh_new%ti2       )
-    CALL reallocate_bounds(  ice%du_dx_a       ,mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds(  ice%du_dy_a       ,mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds(  ice%dv_dx_a       ,mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds(  ice%dv_dy_a       ,mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds(  ice%du_dz_3D_b    ,mesh_new%ti1, mesh_new%ti2, C%nz )
-    CALL reallocate_bounds(  ice%dv_dz_3D_b    ,mesh_new%ti1, mesh_new%ti2, C%nz )
-    CALL reallocate_bounds(  ice%visc_eff_3D_a ,mesh_new%vi1, mesh_new%vi2, C%nz )
-    CALL reallocate_bounds(  ice%visc_eff_int_a,mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds(  ice%N_a           ,mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds(  ice%beta_a        ,mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds(  ice%beta_eff_a    ,mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds(  ice%beta_eff_b    ,mesh_new%ti1, mesh_new%ti2       )
-    CALL reallocate_bounds(  ice%taubx_b       ,mesh_new%ti1, mesh_new%ti2       )
-    CALL reallocate_bounds(  ice%tauby_b       ,mesh_new%ti1, mesh_new%ti2       )
-    CALL reallocate_bounds(  ice%F2_a          ,mesh_new%vi1, mesh_new%vi2       )
-    CALL reallocate_bounds(  ice%u_prev_b      ,mesh_new%ti1, mesh_new%ti2       )
-    CALL reallocate_bounds(  ice%v_prev_b      ,mesh_new%ti1, mesh_new%ti2       )
+    call reallocate_bounds( ice%taudx_b,        mesh_new%ti1, mesh_new%ti2      )
+    call reallocate_bounds( ice%taudy_b,        mesh_new%ti1, mesh_new%ti2      )
+    call reallocate_bounds( ice%du_dx_a,        mesh_new%vi1, mesh_new%vi2      )
+    call reallocate_bounds( ice%du_dy_a,        mesh_new%vi1, mesh_new%vi2      )
+    call reallocate_bounds( ice%dv_dx_a,        mesh_new%vi1, mesh_new%vi2      )
+    call reallocate_bounds( ice%dv_dy_a,        mesh_new%vi1, mesh_new%vi2      )
+    call reallocate_bounds( ice%du_dz_3D_b,     mesh_new%ti1, mesh_new%ti2, C%nz)
+    call reallocate_bounds( ice%dv_dz_3D_b,     mesh_new%ti1, mesh_new%ti2, C%nz)
+    call reallocate_bounds( ice%visc_eff_3D_a,  mesh_new%vi1, mesh_new%vi2, C%nz)
+    call reallocate_bounds( ice%visc_eff_int_a, mesh_new%vi1, mesh_new%vi2      )
+    call reallocate_bounds( ice%N_a,            mesh_new%vi1, mesh_new%vi2      )
+    call reallocate_bounds( ice%beta_a,         mesh_new%vi1, mesh_new%vi2      )
+    call reallocate_bounds( ice%beta_eff_a,     mesh_new%vi1, mesh_new%vi2      )
+    call reallocate_bounds( ice%beta_eff_b,     mesh_new%ti1, mesh_new%ti2      )
+    call reallocate_bounds( ice%taubx_b,        mesh_new%ti1, mesh_new%ti2      )
+    call reallocate_bounds( ice%tauby_b,        mesh_new%ti1, mesh_new%ti2      )
+    call reallocate_bounds( ice%F2_a,           mesh_new%vi1, mesh_new%vi2      )
+    call reallocate_bounds( ice%u_prev_b,       mesh_new%ti1, mesh_new%ti2      )
+    call reallocate_bounds( ice%v_prev_b,       mesh_new%ti1, mesh_new%ti2      )
 
     ! Some administrative stuff to make solving the SSA/DIVA more efficient
-    call reallocate_bounds( ice%ti2n_u        , mesh_new%ti1, mesh_new%ti2         )
-    call reallocate_bounds( ice%ti2n_v        , mesh_new%ti1, mesh_new%ti2         )
-    call reallocate_bounds( ice%n2ti_uv       ,(mesh_new%ti1-1)*2+1, mesh_new%ti2*2, 2  )
+    call reallocate_bounds( ice%ti2n_u,         mesh_new%ti1, mesh_new%ti2      )
+    call reallocate_bounds( ice%ti2n_v,         mesh_new%ti1, mesh_new%ti2      )
+    call reallocate_bounds( ice%n2ti_uv, (mesh_new%ti1-1)*2+1, mesh_new%ti2*2, 2)
 
-    CALL deallocate_matrix_CSR( ice%M_SSADIVA)
-    CALL initialise_matrix_conversion_lists(  mesh_new, ice)
-    CALL initialise_SSADIVA_stiffness_matrix( mesh_new, ice)
+    call deallocate_matrix_CSR( ice%M_SSADIVA)
+    call initialise_matrix_conversion_lists(  mesh_new, ice)
+    call initialise_SSADIVA_stiffness_matrix( mesh_new, ice)
 
     ! Finalise routine path
-    CALL finalise_routine( routine_name)
+    call finalise_routine( routine_name)
 
-  END SUBROUTINE remap_velocities_SSA
+  end subroutine remap_velocities_SSA
 
   ! SUBROUTINE remap_velocities_SIASSA( mesh_old, mesh_new, map, ice)
   !   ! Remap or reallocate all the data fields

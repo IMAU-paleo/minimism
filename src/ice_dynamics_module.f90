@@ -996,6 +996,8 @@ contains
     ice%u_surf_b = 0d0
     allocate(  ice%v_surf_b            (mesh%ti1:mesh%ti2               ))
     ice%v_surf_b = 0d0
+    allocate(  ice%w_surf_a            (mesh%vi1:mesh%vi2               ))
+    ice%w_surf_a = 0d0
     allocate(  ice%uabs_surf_a         (mesh%vi1:mesh%vi2               ))
     ice%uabs_surf_a = 0d0
     allocate(  ice%uabs_surf_b         (mesh%ti1:mesh%ti2               ))
@@ -1009,6 +1011,8 @@ contains
     ice%u_base_b = 0d0
     allocate(  ice%v_base_b            (mesh%ti1:mesh%ti2               ))
     ice%v_base_b = 0d0
+    allocate(  ice%w_base_a            (mesh%vi1:mesh%vi2               ))
+    ice%w_base_a = 0d0
     allocate(  ice%uabs_base_a         (mesh%vi1:mesh%vi2               ))
     ice%uabs_base_a = 0d0
     allocate(  ice%uabs_base_b         (mesh%ti1:mesh%ti2               ))

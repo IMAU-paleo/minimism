@@ -37,7 +37,7 @@ contains
     ! Add routine to path
     call init_routine( routine_name)
 
-    select case(C%choice_sliding_law)
+    select case (C%choice_sliding_law)
 
     case ('no_sliding')
       ! No sliding allowed (choice of beta is trivial)

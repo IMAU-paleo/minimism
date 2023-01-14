@@ -63,6 +63,7 @@ module data_types_module
     REAL(dp), DIMENSION(:    ), allocatable :: v_surf_a
     REAL(dp), DIMENSION(:    ), allocatable :: u_surf_b
     REAL(dp), DIMENSION(:    ), allocatable :: v_surf_b
+    REAL(dp), DIMENSION(:    ), allocatable :: w_surf_a
     REAL(dp), DIMENSION(:    ), allocatable :: uabs_surf_a
     REAL(dp), DIMENSION(:    ), allocatable :: uabs_surf_b
 
@@ -70,6 +71,7 @@ module data_types_module
     REAL(dp), DIMENSION(:    ), allocatable :: v_base_a
     REAL(dp), DIMENSION(:    ), allocatable :: u_base_b
     REAL(dp), DIMENSION(:    ), allocatable :: v_base_b
+    REAL(dp), DIMENSION(:    ), allocatable :: w_base_a
     REAL(dp), DIMENSION(:    ), allocatable :: uabs_base_a
     REAL(dp), DIMENSION(:    ), allocatable :: uabs_base_b
 
