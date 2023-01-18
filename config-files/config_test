@@ -7,7 +7,7 @@
     start_time_of_run_config                    = 0.0                              ! Start time (in years) of the simulations
     end_time_of_run_config                      = 500.0                            ! End   time (in years) of the simulations
     dt_mesh_min_config                          = 1e20                             ! Minimum amount of time (in years) between mesh updates
-    dt_coupling_config                          = 100                              ! Interval of coupling (in years) between the four ice-sheets
+    dt_coupling_config                          = 1e20                             ! Interval of coupling (in years) between the four ice-sheets
 
     ! Ice dynamics
     dt_max_config                               = 1.0                              ! Maximum time step (in years) of the ice model
@@ -42,7 +42,7 @@
     res_max_mountain_config                     = 200.0                            !                                 mountains             [km]
     res_max_coast_config                        = 200.0                            !                                 coastline             [km]
 
-    ! Constrains
+    ! Constraints
     nconmax_config                              = 16                               ! Maximum number of vertex connections
     alpha_min_config                            = 0.55                             ! Minimum internal angle of triangles (0.4363 = 25 degrees)
     dz_max_ice_config                           = 20000.0                          ! Maximum allowed 2nd order surface deviation over ice
@@ -94,7 +94,7 @@
     choice_refgeo_init_ANT_config               = 'realistic'                      ! Choice of initial geometry for Antarctica   ; can be "idealised", "realistic", or "restart"
     filename_refgeo_init_NAM_config             = 'data/ETOPO1/NorthAmerica_ETOPO1_5km.nc'
     filename_refgeo_init_EAS_config             = 'data/ETOPO1/Eurasia_ETOPO1_5km.nc'
-    filename_refgeo_init_GRL_config             = 'data/Bedmachine_Greenland/BedMachine_Greenland_v4_2km.nc'
+    filename_refgeo_init_GRL_config             = 'data/Bedmachine_Greenland/BedMachine_Greenland_v4_5km.nc'
     filename_refgeo_init_ANT_config             = 'data/Bedmachine_Antarctica/Bedmachine_v1_Antarctica_10km.nc'
 
     ! Present-day geometry
@@ -104,7 +104,7 @@
     choice_refgeo_PD_ANT_config                 = 'realistic'                      ! Choice of present-day geometry for Antarctica   ; can be "idealised", "realistic", or "restart"
     filename_refgeo_PD_NAM_config               = 'data/ETOPO1/NorthAmerica_ETOPO1_5km.nc'
     filename_refgeo_PD_EAS_config               = 'data/ETOPO1/Eurasia_ETOPO1_5km.nc'
-    filename_refgeo_PD_GRL_config               = 'data/Bedmachine_Greenland/BedMachine_Greenland_v4_2km.nc'
+    filename_refgeo_PD_GRL_config               = 'data/Bedmachine_Greenland/BedMachine_Greenland_v4_5km.nc'
     filename_refgeo_PD_ANT_config               = 'data/Bedmachine_Antarctica/Bedmachine_v1_Antarctica_10km.nc'
 
     ! GIA equilibrium geometry
@@ -114,7 +114,7 @@
     choice_refgeo_GIAeq_ANT_config              = 'realistic'                      ! Choice of GIA equilibrium geometry for Antarctica   ; can be "idealised", "realistic", or "restart"
     filename_refgeo_GIAeq_NAM_config            = 'data/ETOPO1/NorthAmerica_ETOPO1_5km.nc'
     filename_refgeo_GIAeq_EAS_config            = 'data/ETOPO1/Eurasia_ETOPO1_5km.nc'
-    filename_refgeo_GIAeq_GRL_config            = 'data/Bedmachine_Greenland/BedMachine_Greenland_v4_2km.nc'
+    filename_refgeo_GIAeq_GRL_config            = 'data/Bedmachine_Greenland/BedMachine_Greenland_v4_5km.nc'
     filename_refgeo_GIAeq_ANT_config            = 'data/Bedmachine_Antarctica/Bedmachine_v1_Antarctica_10km.nc'
 
     remove_Lake_Vostok_config                   = .TRUE.
@@ -148,7 +148,7 @@
     m_enh_shelf_config                          = 0.1                              ! Ice flow enhancement factor for floating ice
 
     ! Ice dynamics
-    choice_ice_dynamics_config                  = 'SSA'                            ! Choice of ice-dynamics approximation: "none" (= fixed geometry), "SIA", "SSA", "SIA/SSA", "DIVA"
+    choice_ice_dynamics_config                  = 'SIA/SSA'                        ! Choice of ice-dynamics approximation: "none" (= fixed geometry), "SIA", "SSA", "SIA/SSA", "DIVA"
     include_SSADIVA_crossterms_config           = .TRUE.                           ! Whether or not to include the "cross-terms" of the SSA/DIVA
 
     ! Boundary conditions
@@ -164,7 +164,7 @@
     DIVA_boundary_BC_v_north_config             = 'infinite'
 
     ! Some parameters for numerically solving the SSA/DIVA
-    DIVA_visc_it_norm_dUV_tol_config            = 5E-3                             ! Successive solutions of UV in the effective viscosity iteration must not differ by more than this amount (on average)
+    DIVA_visc_it_norm_dUV_tol_config            = 1E-2                             ! Successive solutions of UV in the effective viscosity iteration must not differ by more than this amount (on average)
     DIVA_visc_it_nit_config                     = 100                              ! Maximum number of effective viscosity iterations
     DIVA_visc_it_relax_config                   = 0.1                              ! Relaxation parameter for subsequent viscosity iterations (for improved stability)
     DIVA_epsilon_sq_0_config                    = 1E-15                            ! Normalisation term so that zero velocity gives non-zero viscosity
@@ -228,7 +228,7 @@
   ! ======================
 
     do_remove_shelves_config                    = .FALSE.                          ! If set to TRUE, all floating ice is always instantly removed (used in the ABUMIP-ABUK experiment)
-    remove_shelves_larger_than_PD_config        = .FALSE.                          ! If set to TRUE, all floating ice beyond the present-day calving front is removed (used for some Antarctic spin-ups)
+    remove_shelves_larger_than_PD_config        = .TRUE.                           ! If set to TRUE, all floating ice beyond the present-day calving front is removed (used for some Antarctic spin-ups)
     continental_shelf_calving_config            = .FALSE.                          ! If set to TRUE, all ice beyond the continental shelf edge (set by a maximum depth) is removed
     continental_shelf_min_height_config         = -1500.0                          ! Maximum depth of the continental shelf
     minimum_ice_thickness_config                = 2.0                              ! If ice anywhere is thinner than this, remove it
@@ -304,7 +304,7 @@
 
     choice_BMB_shelf_model_config               = 'uniform'                        ! Choice of shelf BMB: "uniform"
     choice_BMB_sheet_model_config               = 'uniform'                        ! Choice of sheet BMB: "uniform"
-    BMB_shelf_uniform_config                    = 0.0                              ! Uniform shelf BMB, applied when choice_BMB_shelf_model = "uniform" [mie/yr]
+    BMB_shelf_uniform_config                    = 1.0                              ! Uniform shelf BMB, applied when choice_BMB_shelf_model = "uniform" [mie/yr]
     BMB_sheet_uniform_config                    = 0.0                              ! Uniform sheet BMB, applied when choice_BMB_sheet_model = "uniform" [mie/yr]
     choice_BMB_subgrid_config                   = 'FCMP'                           ! Choice of sub-grid BMB scheme: "FCMP", "PMP", "NMP" (following Leguy et al., 2021)
 
