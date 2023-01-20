@@ -37,7 +37,7 @@ contains
     ! Add routine to path
     call init_routine( routine_name)
 
-    select case(C%choice_sliding_law)
+    select case (C%choice_sliding_law)
 
     case ('no_sliding')
       ! No sliding allowed (choice of beta is trivial)
@@ -531,116 +531,114 @@ contains
 ! ===== Sliding laws =====
 ! ========================
 
-  SUBROUTINE calc_sliding_law_Coulomb_regularised( mesh, ice, u_a, v_a, beta_a)
-    ! Regularised Coulomb-type sliding law
-
-    IMPLICIT NONE
-
-    ! In- and output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    TYPE(type_ice_model),                INTENT(INOUT) :: ice
-    REAL(dp), DIMENSION(mesh%vi1:mesh%vi2), INTENT(IN) :: u_a
-    REAL(dp), DIMENSION(mesh%vi1:mesh%vi2), INTENT(IN) :: v_a
-    REAL(dp), DIMENSION(mesh%vi1:mesh%vi2), INTENT(OUT):: beta_a
-
-    ! Local variables:
-    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'calc_sliding_law_Coulomb_regularised'
-    INTEGER                                            :: vi
-    REAL(dp)                                           :: uabs
-
-    ! Add routine to path
-    CALL init_routine( routine_name)
-
-    ! Calculate the till yield stress from the till friction angle and the effective pressure
-    DO vi = mesh%vi1, mesh%vi2
-      ice%tauc_a( vi) = TAN((pi / 180._dp) * ice%phi_fric_a( vi)) * ice%Neff_a( vi)
-    END DO
-    CALL sync
-
-    ! Calculate beta
-    DO vi = mesh%vi1, mesh%vi2
-
-      ! Include a normalisation term following Bueler & Brown (2009) to prevent divide-by-zero errors.
-      uabs = SQRT( C%slid_delta_v**2 + u_a( vi)**2 + v_a( vi)**2)
-
-      beta_a( vi) = ice%tauc_a( vi) * uabs ** (C%slid_Coulomb_reg_q_plastic - 1._dp) / (C%slid_Coulomb_reg_u_threshold ** C%slid_Coulomb_reg_q_plastic)
-
-    END DO
-
-    ! Safety
-    CALL check_for_NaN_dp_1D( beta_a, 'beta_a')
-
-    ! Finalise routine path
-    CALL finalise_routine( routine_name)
-
-  END SUBROUTINE calc_sliding_law_Coulomb_regularised
-
-  SUBROUTINE calc_sliding_law_ZoetIverson( mesh, ice, u_a, v_a, beta_a)
-    ! Zoet-Iverson sliding law (Zoet & Iverson, 2020)
-
-    IMPLICIT NONE
-
-    ! In- and output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    TYPE(type_ice_model),                INTENT(INOUT) :: ice
-    REAL(dp), DIMENSION(:    ),          INTENT(IN)    :: u_a
-    REAL(dp), DIMENSION(:    ),          INTENT(IN)    :: v_a
-    REAL(dp), DIMENSION(:    ),          INTENT(OUT)   :: beta_a
-
-    ! Local variables:
-    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'calc_sliding_law_ZoetIverson'
-    INTEGER                                            :: vi
-    REAL(dp)                                           :: uabs
-
-    ! Add routine to path
-    CALL init_routine( routine_name)
-
-    ! Calculate the till yield stress from the till friction angle and the effective pressure
-    DO vi = mesh%vi1, mesh%vi2
-      ice%tauc_a( vi) = TAN((pi / 180._dp) * ice%phi_fric_a( vi)) * ice%Neff_a( vi)
-    END DO
-
-    ! Calculate beta
-    DO vi = mesh%vi1, mesh%vi2
-
-      ! Include a normalisation term following Bueler & Brown (2009) to prevent divide-by-zero errors.
-      uabs = SQRT( C%slid_delta_v**2 + u_a( vi)**2 + v_a( vi)**2)
-
-      ! Zoet & Iverson (2020), Eq. (3) (divided by u to give beta = tau_b / u)
-      beta_a( vi) = ice%tauc_a( vi) * (uabs**(1._dp / C%slid_ZI_p - 1._dp)) * ((uabs + C%slid_ZI_ut)**(-1._dp / C%slid_ZI_p))
-
-    END DO
-
-    ! Safety
-    CALL check_for_NaN_dp_1D( beta_a, 'beta_a')
-
-    ! Finalise routine path
-    CALL finalise_routine( routine_name)
-
-  END SUBROUTINE calc_sliding_law_ZoetIverson
-
-  SUBROUTINE calc_sliding_law_idealised(  mesh, ice, beta_a)
+  subroutine calc_sliding_law_idealised(  mesh, ice, beta_a)
     ! Sliding laws for some idealised experiments
 
-    IMPLICIT NONE
+    implicit none
 
     ! In- and output variables:
-    TYPE(type_mesh),                     INTENT(IN)    :: mesh
-    TYPE(type_ice_model),                INTENT(IN)    :: ice
-    REAL(dp), DIMENSION(:    ),          INTENT(OUT)   :: beta_a
+    type(type_mesh),        intent(in)  :: mesh
+    type(type_ice_model),   intent(in)  :: ice
+    real(dp), dimension(:), intent(out) :: beta_a
 
     ! Local variables:
-    CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'calc_sliding_law_idealised'
+    character(len=256), parameter       :: routine_name = 'calc_sliding_law_idealised'
 
     ! Add routine to path
-    CALL init_routine( routine_name)
+    call init_routine( routine_name)
 
     call crash('idealised sliding stuff not yet implemented!')
 
     ! Finalise routine path
-    CALL finalise_routine( routine_name)
+    call finalise_routine( routine_name)
 
-  END SUBROUTINE calc_sliding_law_idealised
+  end subroutine calc_sliding_law_idealised
+
+  subroutine calc_sliding_law_Coulomb_regularised( mesh, ice, u_a, v_a, beta_a)
+    ! Regularised Coulomb-type sliding law
+
+    implicit none
+
+    ! In- and output variables:
+    type(type_mesh),                        intent(in)    :: mesh
+    type(type_ice_model),                   intent(inout) :: ice
+    real(dp), dimension(mesh%vi1:mesh%vi2), intent(in)    :: u_a
+    real(dp), dimension(mesh%vi1:mesh%vi2), intent(in)    :: v_a
+    real(dp), dimension(mesh%vi1:mesh%vi2), intent(out)   :: beta_a
+
+    ! Local variables:
+    character(len=256), parameter                         :: routine_name = 'calc_sliding_law_Coulomb_regularised'
+    integer                                               :: vi
+    real(dp)                                              :: uabs
+
+    ! Add routine to path
+    call init_routine( routine_name)
+
+    ! Calculate the till yield stress from the till friction angle and the effective pressure
+    do vi = mesh%vi1, mesh%vi2
+      ice%tauc_a( vi) = tan((pi / 180._dp) * ice%phi_fric_a( vi)) * ice%Neff_a( vi)
+    end do
+
+    ! Calculate beta (tau_c over magnitude of velocity in Doc. Eq. 5 and 6)
+    do vi = mesh%vi1, mesh%vi2
+      ! Include a normalisation term following Bueler & Brown (2009) to prevent divide-by-zero errors.
+      uabs = sqrt( C%slid_delta_v**2 + u_a( vi)**2 + v_a( vi)**2)
+
+      ! Compute beta
+      beta_a( vi) = ice%tauc_a( vi) * uabs ** (C%slid_Coulomb_reg_q_plastic - 1._dp) / (C%slid_Coulomb_reg_u_threshold ** C%slid_Coulomb_reg_q_plastic)
+    end do
+
+    ! Safety
+    call check_for_NaN_dp_1D( beta_a, 'beta_a')
+
+    ! Finalise routine path
+    call finalise_routine( routine_name)
+
+  end subroutine calc_sliding_law_Coulomb_regularised
+
+  subroutine calc_sliding_law_ZoetIverson( mesh, ice, u_a, v_a, beta_a)
+    ! Zoet-Iverson sliding law (Zoet & Iverson, 2020)
+
+    implicit none
+
+    ! In- and output variables:
+    type(type_mesh),        intent(in)    :: mesh
+    type(type_ice_model),   intent(inout) :: ice
+    real(dp), dimension(:), intent(in)    :: u_a
+    real(dp), dimension(:), intent(in)    :: v_a
+    real(dp), dimension(:), intent(out)   :: beta_a
+
+    ! Local variables:
+    character(len=256), parameter         :: routine_name = 'calc_sliding_law_ZoetIverson'
+    integer                               :: vi
+    real(dp)                              :: uabs
+
+    ! Add routine to path
+    call init_routine( routine_name)
+
+    ! Calculate the till yield stress from the till friction angle and the effective pressure
+    do vi = mesh%vi1, mesh%vi2
+      ice%tauc_a( vi) = tan((pi / 180._dp) * ice%phi_fric_a( vi)) * ice%Neff_a( vi)
+    end do
+
+    ! Calculate beta
+    do vi = mesh%vi1, mesh%vi2
+
+      ! Include a normalisation term following Bueler & Brown (2009) to prevent divide-by-zero errors.
+      uabs = sqrt( C%slid_delta_v**2 + u_a( vi)**2 + v_a( vi)**2)
+
+      ! Zoet & Iverson (2020), Eq. (3) (divided by u to give beta = tau_b / u)
+      beta_a( vi) = ice%tauc_a( vi) * (uabs**(1._dp / C%slid_ZI_p - 1._dp)) * ((uabs + C%slid_ZI_ut)**(-1._dp / C%slid_ZI_p))
+
+    end do
+
+    ! Safety
+    call check_for_NaN_dp_1D( beta_a, 'beta_a')
+
+    ! Finalise routine path
+    call finalise_routine( routine_name)
+
+  end subroutine calc_sliding_law_ZoetIverson
 
 ! ===== Remapping =====
 ! =====================

@@ -288,6 +288,8 @@ MODULE configuration_module
   CHARACTER(LEN=256)  :: choice_ice_margin_config                    = 'infinite_slab'                  ! Choice of ice margin boundary conditions: "BC", "infinite_slab"
   LOGICAL             :: include_SSADIVA_crossterms_config           = .TRUE.                           ! Whether or not to include the "cross-terms" of the SSA/DIVA
   LOGICAL             :: do_GL_subgrid_friction_config               = .TRUE.                           ! Whether or not to scale basal friction with the sub-grid grounded fraction (needed to get proper GL migration; only turn this off for showing the effect on the MISMIP_mod results!)
+  LOGICAL             :: do_hybrid_Bernales2017_config               = .TRUE.                           ! Apply SStA + reduced SIA hybrid scheme when using the SIA/SSA method
+  REAL(dp)            :: vel_ref_Bernales2017_config                 = 10._dp                           ! Reference "onset" velocity for an ice stream (point of half SIA reduction)
   LOGICAL             :: do_smooth_geometry_config                   = .FALSE.                          ! Whether or not to smooth the model geometry (bedrock + initial ice thickness)
   REAL(dp)            :: r_smooth_geometry_config                    = 0.5_dp                           ! Geometry smoothing radius (in number of grid cells)
 
@@ -845,6 +847,8 @@ MODULE configuration_module
     CHARACTER(LEN=256)                  :: choice_ice_margin
     LOGICAL                             :: include_SSADIVA_crossterms
     LOGICAL                             :: do_GL_subgrid_friction
+    LOGICAL                             :: do_hybrid_Bernales2017
+    REAL(dp)                            :: vel_ref_Bernales2017
     LOGICAL                             :: do_smooth_geometry
     REAL(dp)                            :: r_smooth_geometry
 
@@ -1493,6 +1497,8 @@ CONTAINS
                      choice_ice_margin_config,                        &
                      include_SSADIVA_crossterms_config,               &
                      do_GL_subgrid_friction_config,                   &
+                     do_hybrid_Bernales2017_config,                   &
+                     vel_ref_Bernales2017_config,                     &
                      do_smooth_geometry_config,                       &
                      r_smooth_geometry_config,                        &
                      DIVA_visc_it_norm_dUV_tol_config,                &
@@ -2011,6 +2017,8 @@ CONTAINS
     C%choice_ice_margin                        = choice_ice_margin_config
     C%include_SSADIVA_crossterms               = include_SSADIVA_crossterms_config
     C%do_GL_subgrid_friction                   = do_GL_subgrid_friction_config
+    C%do_hybrid_Bernales2017                   = do_hybrid_Bernales2017_config
+    C%vel_ref_Bernales2017                     = vel_ref_Bernales2017_config
     C%do_smooth_geometry                       = do_smooth_geometry_config
     C%r_smooth_geometry                        = r_smooth_geometry_config
 
