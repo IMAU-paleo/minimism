@@ -1538,15 +1538,39 @@ contains
         ice%u_base_b( mesh%ti1:mesh%ti2) = ice%u_base_SSA_b( mesh%ti1:mesh%ti2)
         ice%v_base_b( mesh%ti1:mesh%ti2) = ice%v_base_SSA_b( mesh%ti1:mesh%ti2)
 
-        ! Set 3-D velocities equal to the SIA solution
-        ice%u_3D_b( mesh%ti1:mesh%ti2,:) = ice%u_3D_SIA_b( mesh%ti1:mesh%ti2,:)
-        ice%v_3D_b( mesh%ti1:mesh%ti2,:) = ice%v_3D_SIA_b( mesh%ti1:mesh%ti2,:)
+        if (C%do_hybrid_Bernales2017) then
 
-        ! Add the SSA contributions to the 3-D velocities
-        do k = 1, C%nz
-          ice%u_3D_b( mesh%ti1:mesh%ti2,k) = ice%u_3D_b( mesh%ti1:mesh%ti2,k) + ice%u_base_b( mesh%ti1:mesh%ti2)
-          ice%v_3D_b( mesh%ti1:mesh%ti2,k) = ice%v_3D_b( mesh%ti1:mesh%ti2,k) + ice%v_base_b( mesh%ti1:mesh%ti2)
-        end do
+          do k = 1, C%nz
+           ! Set 3-D velocities equal to the SSA solution
+            ice%u_3D_b( mesh%ti1:mesh%ti2,k) = ice%u_base_SSA_b( mesh%ti1:mesh%ti2)
+            ice%v_3D_b( mesh%ti1:mesh%ti2,k) = ice%v_base_SSA_b( mesh%ti1:mesh%ti2)
+          end do
+
+          do ti = mesh%ti1, mesh%ti2
+
+            ! Compute the SIA fraction that will be added to the SSA solution
+            w_sia_u = 1._dp - (2.0_dp/pi) * atan( (abs( ice%u_base_SSA_b( ti))**2.0_dp) / (C%vel_ref_Bernales2017**2.0_dp) )
+            w_sia_v = 1._dp - (2.0_dp/pi) * atan( (abs( ice%v_base_SSA_b( ti))**2.0_dp) / (C%vel_ref_Bernales2017**2.0_dp) )
+
+            ! Add the SIA fractions to the 3-D velocities
+            ice%u_3D_b( ti,:) = ice%u_3D_b( ti,:) + w_sia_u * ice%u_3D_SIA_b( ti,:)
+            ice%v_3D_b( ti,:) = ice%v_3D_b( ti,:) + w_sia_v * ice%v_3D_SIA_b( ti,:)
+
+          end do
+
+        else
+
+          ! Set 3-D velocities equal to the SIA solution
+          ice%u_3D_b( mesh%ti1:mesh%ti2,:) = ice%u_3D_SIA_b( mesh%ti1:mesh%ti2,:)
+          ice%v_3D_b( mesh%ti1:mesh%ti2,:) = ice%v_3D_SIA_b( mesh%ti1:mesh%ti2,:)
+
+          ! Add the SSA contributions to the 3-D velocities
+          do k = 1, C%nz
+            ice%u_3D_b( mesh%ti1:mesh%ti2,k) = ice%u_3D_b( mesh%ti1:mesh%ti2,k) + ice%u_base_b( mesh%ti1:mesh%ti2)
+            ice%v_3D_b( mesh%ti1:mesh%ti2,k) = ice%v_3D_b( mesh%ti1:mesh%ti2,k) + ice%v_base_b( mesh%ti1:mesh%ti2)
+          end do
+
+        end if
 
         ! Calculate 3D vertical velocity from 3D horizontal velocities and conservation of mass
         call calc_3D_vertical_velocities( mesh, ice)
