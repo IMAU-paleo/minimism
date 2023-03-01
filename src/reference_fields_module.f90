@@ -21,6 +21,7 @@ module reference_fields_module
                                    map_grid2mesh_2D_partial, deallocate_remapping_operators_grid2mesh
   use utilities_module,     only : check_for_NaN_dp_2D, remove_Lake_Vostok, &
                                    is_floating, surface_elevation, oblique_sg_projection
+  use parameters_module,    only : pi
 
   implicit none
 
@@ -360,6 +361,16 @@ contains
     IF     (choice_refgeo_idealised == 'flatearth') THEN
       ! Simply a flat, empty earth. Used for example in the EISMINT-1 benchmark experiments
       CALL initialise_reference_geometry_idealised_grid_flatearth(     refgeo%grid, refgeo)
+    ELSEIF (choice_refgeo_idealised == 'ISMIP_HOM_A') THEN
+      ! The ISMIP-HOM A bumpy slope
+      CALL initialise_reference_geometry_idealised_grid_ISMIP_HOM_A(   refgeo%grid, refgeo)
+    ELSEIF (choice_refgeo_idealised == 'ISMIP_HOM_B') THEN
+      ! The ISMIP-HOM B bumpy slope
+      CALL initialise_reference_geometry_idealised_grid_ISMIP_HOM_B(   refgeo%grid, refgeo)
+    ELSEIF (choice_refgeo_idealised == 'ISMIP_HOM_C' .OR. &
+            choice_refgeo_idealised == 'ISMIP_HOM_D') THEN
+      ! The ISMIP-HOM C/D bumpy slope
+      CALL initialise_reference_geometry_idealised_grid_ISMIP_HOM_CD(  refgeo%grid, refgeo)
 #if 0
     ELSEIF (choice_refgeo_idealised == 'Halfar') THEN
       ! The Halfar dome solution at t = 0
@@ -373,16 +384,6 @@ contains
     ELSEIF (choice_refgeo_idealised == 'MISMIP_mod') THEN
       ! The MISMIP_mod cone-shaped island
       CALL initialise_reference_geometry_idealised_grid_MISMIP_mod(    refgeo%grid, refgeo)
-    ELSEIF (choice_refgeo_idealised == 'ISMIP_HOM_A') THEN
-      ! The ISMIP-HOM A bumpy slope
-      CALL initialise_reference_geometry_idealised_grid_ISMIP_HOM_A(   refgeo%grid, refgeo)
-    ELSEIF (choice_refgeo_idealised == 'ISMIP_HOM_B') THEN
-      ! The ISMIP-HOM B bumpy slope
-      CALL initialise_reference_geometry_idealised_grid_ISMIP_HOM_B(   refgeo%grid, refgeo)
-    ELSEIF (choice_refgeo_idealised == 'ISMIP_HOM_C' .OR. &
-            choice_refgeo_idealised == 'ISMIP_HOM_D') THEN
-      ! The ISMIP-HOM C/D bumpy slope
-      CALL initialise_reference_geometry_idealised_grid_ISMIP_HOM_CD(  refgeo%grid, refgeo)
     ELSEIF (choice_refgeo_idealised == 'ISMIP_HOM_E') THEN
       ! The ISMIP-HOM E Glacier d'Arolla geometry
       CALL initialise_reference_geometry_idealised_grid_ISMIP_HOM_E(   refgeo%grid, refgeo)
@@ -432,6 +433,99 @@ contains
     CALL finalise_routine( routine_name)
   
   END SUBROUTINE initialise_reference_geometry_idealised_grid_flatearth
+
+  subroutine initialise_reference_geometry_idealised_grid_ISMIP_HOM_A(   grid, refgeo)
+    ! Initialise reference geometry according to an idealised world
+    !
+    ! The ISMIP-HOM A bumpy slope
+
+    implicit none
+
+    ! In/output variables:
+    type(type_grid),                intent(in)    :: grid
+    type(type_reference_geometry),  intent(inout) :: refgeo
+
+    ! Local variables:
+    character(len=256), parameter                 :: routine_name = 'initialise_reference_geometry_idealised_grid_ISMIP_HOM_A'
+    integer                                       :: i,j
+
+    ! Add routine to path
+    CALL init_routine( routine_name)
+
+    DO i = 1, grid%nx
+    DO j = 1, grid%ny
+      refgeo%Hs_grid( i,j) = 2000._dp - grid%x( i) * TAN( 0.5_dp * pi / 180._dp)
+      refgeo%Hb_grid( i,j) = refgeo%Hs_grid( i,j) - 1000._dp + 500._dp * SIN( grid%x( i) * 2._dp * pi / C%ISMIP_HOM_L) * SIN( grid%y( j) * 2._dp * pi / C%ISMIP_HOM_L)
+      refgeo%Hi_grid( i,j) = refgeo%Hs_grid( i,j) - refgeo%Hb_grid( i,j)
+    END DO
+    END DO
+
+    ! Finalise routine path
+    CALL finalise_routine( routine_name)
+
+  END SUBROUTINE initialise_reference_geometry_idealised_grid_ISMIP_HOM_A
+
+  SUBROUTINE initialise_reference_geometry_idealised_grid_ISMIP_HOM_B(   grid, refgeo)
+    ! Initialise reference geometry according to an idealised world
+    !
+    ! The ISMIP-HOM B bumpy slope
+
+    implicit none
+
+    ! In/output variables:
+    type(type_grid),                intent(in)    :: grid
+    type(type_reference_geometry),  intent(inout) :: refgeo
+
+    ! Local variables:
+    character(len=256), parameter                 :: routine_name = 'initialise_reference_geometry_idealised_grid_ISMIP_HOM_B'
+    integer                                       :: i,j
+
+    ! Add routine to path
+    CALL init_routine( routine_name)
+
+    do i = 1, grid%nx
+    do j = 1, grid%ny
+      refgeo%Hs_grid( i,j) = 2000._dp - grid%x( i) * TAN( 0.5_dp * pi / 180._dp)
+      refgeo%Hb_grid( i,j) = refgeo%Hs_grid( i,j) - 1000._dp + 500._dp * SIN( grid%x(i) * 2._dp * pi / C%ISMIP_HOM_L)
+      refgeo%Hi_grid( i,j) = refgeo%Hs_grid( i,j) - refgeo%Hb_grid( i,j)
+    end do
+    end do
+
+    ! Finalise routine path
+    CALL finalise_routine( routine_name)
+
+  END SUBROUTINE initialise_reference_geometry_idealised_grid_ISMIP_HOM_B
+
+  SUBROUTINE initialise_reference_geometry_idealised_grid_ISMIP_HOM_CD(  grid, refgeo)
+    ! Initialise reference geometry according to an idealised world
+    !
+    ! The ISMIP-HOM C/D bumpy slope
+
+    implicit none
+
+    ! In/output variables:
+    type(type_grid),                intent(in)    :: grid
+    type(type_reference_geometry),  intent(inout) :: refgeo
+
+    ! Local variables:
+    character(len=256), parameter                 :: routine_name = 'initialise_reference_geometry_idealised_grid_ISMIP_HOM_CD'
+    integer                                       :: i,j
+
+    ! Add routine to path
+    CALL init_routine( routine_name)
+
+    do i = 1, grid%nx
+    do j = 1, grid%ny
+      refgeo%Hs_grid( i,j) = 2000._dp - grid%x( i) * TAN( 0.1_dp * pi / 180._dp)
+      refgeo%Hb_grid( i,j) = refgeo%Hs_grid( i,j) - 1000._dp
+      refgeo%Hi_grid( i,j) = refgeo%Hs_grid( i,j) - refgeo%Hb_grid( i,j)
+    end do
+    end do
+
+    ! Finalise routine path
+    CALL finalise_routine( routine_name)
+
+  END SUBROUTINE initialise_reference_geometry_idealised_grid_ISMIP_HOM_CD
 
   SUBROUTINE setup_idealised_geometry_grid( grid, region_name, dx)
     ! Set up a square grid for the idealised reference geometry (since it is now not provided externally)
@@ -722,6 +816,16 @@ contains
     IF     (choice_refgeo_idealised == 'flatearth') THEN
       ! Simply a flat, empty earth. Used for example in the EISMINT-1 benchmark experiments
       CALL initialise_reference_geometry_idealised_mesh_flatearth(     mesh, refgeo)
+    ELSEIF (choice_refgeo_idealised == 'ISMIP_HOM_A') THEN
+      ! The ISMIP-HOM A bumpy slope
+      CALL initialise_reference_geometry_idealised_mesh_ISMIP_HOM_A(   mesh, refgeo)
+    ELSEIF (choice_refgeo_idealised == 'ISMIP_HOM_B') THEN
+      ! The ISMIP-HOM B bumpy slope
+      CALL initialise_reference_geometry_idealised_mesh_ISMIP_HOM_B(   mesh, refgeo)
+    ELSEIF (choice_refgeo_idealised == 'ISMIP_HOM_C' .OR. &
+            choice_refgeo_idealised == 'ISMIP_HOM_D') THEN
+      ! The ISMIP-HOM C/D bumpy slope
+      CALL initialise_reference_geometry_idealised_mesh_ISMIP_HOM_CD(  mesh, refgeo)
 #if 0  
     ELSEIF (choice_refgeo_idealised == 'Halfar') THEN
       ! The Halfar dome solution at t = 0
@@ -735,16 +839,6 @@ contains
     ELSEIF (choice_refgeo_idealised == 'MISMIP_mod') THEN
       ! The MISMIP_mod cone-shaped island
       CALL initialise_reference_geometry_idealised_mesh_MISMIP_mod(    mesh, refgeo)
-    ELSEIF (choice_refgeo_idealised == 'ISMIP_HOM_A') THEN
-      ! The ISMIP-HOM A bumpy slope
-      CALL initialise_reference_geometry_idealised_mesh_ISMIP_HOM_A(   mesh, refgeo)
-    ELSEIF (choice_refgeo_idealised == 'ISMIP_HOM_B') THEN
-      ! The ISMIP-HOM B bumpy slope
-      CALL initialise_reference_geometry_idealised_mesh_ISMIP_HOM_B(   mesh, refgeo)
-    ELSEIF (choice_refgeo_idealised == 'ISMIP_HOM_C' .OR. &
-            choice_refgeo_idealised == 'ISMIP_HOM_D') THEN
-      ! The ISMIP-HOM C/D bumpy slope
-      CALL initialise_reference_geometry_idealised_mesh_ISMIP_HOM_CD(  mesh, refgeo)
     ELSEIF (choice_refgeo_idealised == 'ISMIP_HOM_E') THEN
       ! The ISMIP-HOM E Glacier d'Arolla geometry
       CALL initialise_reference_geometry_idealised_mesh_ISMIP_HOM_E(   mesh, refgeo)
@@ -792,6 +886,94 @@ contains
     CALL finalise_routine( routine_name)
   
   END SUBROUTINE initialise_reference_geometry_idealised_mesh_flatearth
+
+ SUBROUTINE initialise_reference_geometry_idealised_mesh_ISMIP_HOM_A(   mesh, refgeo)
+    ! Initialise reference geometry according to an idealised world
+    !
+    ! The ISMIP-HOM A bumpy slope
+
+    IMPLICIT NONE
+
+    ! In/output variables:
+    TYPE(type_mesh),                INTENT(IN)    :: mesh
+    TYPE(type_reference_geometry),  INTENT(INOUT) :: refgeo
+
+    ! Local variables:
+    CHARACTER(LEN=256), PARAMETER                 :: routine_name = 'initialise_reference_geometry_idealised_mesh_ISMIP_HOM_A'
+    INTEGER                                       :: vi
+
+    ! Add routine to path
+    CALL init_routine( routine_name)
+
+    DO vi = mesh%vi1, mesh%vi2
+      refgeo%Hs( vi) = 2000._dp - mesh%V( vi,1) * TAN( 0.5_dp * pi / 180._dp)
+      refgeo%Hb( vi) = refgeo%Hs( vi) - 1000._dp + 500._dp * SIN( mesh%V( vi,1) * 2._dp * pi / C%ISMIP_HOM_L) * SIN( mesh%V( vi,2) * 2._dp * pi / C%ISMIP_HOM_L)
+      refgeo%Hi( vi) = refgeo%Hs( vi) - refgeo%Hb( vi)
+    END DO
+    CALL sync
+
+    ! Finalise routine path
+    CALL finalise_routine( routine_name)
+
+  END SUBROUTINE initialise_reference_geometry_idealised_mesh_ISMIP_HOM_A
+
+  subroutine initialise_reference_geometry_idealised_mesh_ISMIP_HOM_B(   mesh, refgeo)
+    ! Initialise reference geometry according to an idealised world
+    !
+    ! The ISMIP-HOM B bumpy slope
+
+    implicit none
+
+    ! In/output variables:
+    type(type_mesh),                intent(in)    :: mesh
+    type(type_reference_geometry),  intent(inout) :: refgeo
+
+    ! Local variables:
+    character(len=256), parameter                 :: routine_name = 'initialise_reference_geometry_idealised_mesh_ISMIP_HOM_B'
+    integer                                       :: vi
+
+    ! Add routine to path
+    CALL init_routine( routine_name)
+
+    do vi = mesh%vi1, mesh%vi2
+      refgeo%Hs( vi) = 2000._dp - mesh%V( vi,1) * TAN( 0.5_dp * pi / 180._dp)
+      refgeo%Hb( vi) = refgeo%Hs( vi) - 1000._dp + 500._dp * SIN( mesh%V( vi,1) * 2._dp * pi / C%ISMIP_HOM_L)
+      refgeo%Hi( vi) = refgeo%Hs( vi) - refgeo%Hb( vi)
+    end do
+
+    ! Finalise routine path
+    CALL finalise_routine( routine_name)
+
+  END SUBROUTINE initialise_reference_geometry_idealised_mesh_ISMIP_HOM_B
+
+  SUBROUTINE initialise_reference_geometry_idealised_mesh_ISMIP_HOM_CD(  mesh, refgeo)
+    ! Initialise reference geometry according to an idealised world
+    !
+    ! The ISMIP-HOM C/D bumpy slope
+
+    IMPLICIT NONE
+
+    ! In/output variables:
+    TYPE(type_mesh),                INTENT(IN)    :: mesh
+    TYPE(type_reference_geometry),  INTENT(INOUT) :: refgeo
+
+    ! Local variables:
+    CHARACTER(LEN=256), PARAMETER                 :: routine_name = 'initialise_reference_geometry_idealised_mesh_ISMIP_HOM_CD'
+    INTEGER                                       :: vi
+
+    ! Add routine to path
+    CALL init_routine( routine_name)
+
+    DO vi = mesh%vi1, mesh%vi2
+      refgeo%Hs( vi) = 2000._dp - mesh%V( vi,1) * TAN( 0.1_dp * pi / 180._dp)
+      refgeo%Hb( vi) = refgeo%Hs( vi) - 1000._dp
+      refgeo%Hi( vi) = refgeo%Hs( vi) - refgeo%Hb( vi)
+    END DO
+
+    ! Finalise routine path
+    CALL finalise_routine( routine_name)
+
+  END SUBROUTINE initialise_reference_geometry_idealised_mesh_ISMIP_HOM_CD
 
 ! ===== Mesh mapping =====
 ! ========================

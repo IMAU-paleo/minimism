@@ -132,15 +132,26 @@ MODULE mesh_update_module
     END DO ! DO ti = 1, mesh%nT
 
     ! Calculate mesh fitness
-    fcoast  = 1._dp - lucoast  / lcoast
-    fmargin = 1._dp - lumargin / lmargin
-    fgl     = 1._dp - lugl     / lgl
-    fcf     = 1._dp - lucf     / lcf
-
-    IF (ncoast ==0) fcoast  = 1._dp
-    IF (nmargin==0) fmargin = 1._dp
-    IF (ngl    ==0) fgl     = 1._dp
-    if (ncf    ==0) fcf     = 1._dp
+    IF (ncoast ==0) then
+      fcoast  = 1._dp
+    else
+      fcoast  = 1._dp - lucoast  / lcoast
+    endif
+    IF (nmargin==0) then
+      fmargin = 1._dp
+    else
+      fmargin = 1._dp - lumargin / lmargin
+    endif
+    IF (ngl    ==0) then
+      fgl     = 1._dp
+    else
+      fgl     = 1._dp - lugl     / lgl
+    endif
+    if (ncf    ==0) then
+      fcf     = 1._dp
+    else
+      fcf     = 1._dp - lucf     / lcf
+    endif
 
     fitness = MIN( MIN( MIN( fcoast, fmargin), fgl), fcf)
 

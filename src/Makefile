@@ -64,6 +64,7 @@ UFEMISM_program_objects = \
         SMB_module.o \
         scalar_data_output_module.o \
         UFEMISM_main_model.o \
+        validation_module.o \
         UFEMISM_program.o
 
 # This rule is used to build an executable from the object files:

@@ -1586,7 +1586,7 @@ MODULE mesh_help_functions_module
 
     IMPLICIT NONE
 
-    TYPE(type_mesh),          INTENT(INOUT)       :: mesh
+    TYPE(type_mesh),          INTENT(IN)          :: mesh
     REAL(dp), DIMENSION(2),   INTENT(IN)          :: p
     INTEGER,                  INTENT(INOUT)       :: t
 
@@ -1597,6 +1597,15 @@ MODULE mesh_help_functions_module
     INTEGER                                       :: tc, tcmin
     LOGICAL                                       :: FoundIt
     INTEGER                                       :: n, ti, n2, tin
+
+    ! Maps+stacks for FloodFill-algorithm
+    INTEGER,  DIMENSION(:    ), ALLOCATABLE :: TriMap, TriStack1, TriStack2
+    INTEGER                                 :: VStackN1, VStackN2
+    INTEGER                                 :: TriStackN1, TriStackN2
+
+    allocate( TriMap         (mesh%nTri ))
+    allocate( TriStack1      (mesh%nTri ))
+    allocate( TriStack2      (mesh%nTri ))
 
     ! If p lies outside the mesh domain, throw an error
     IF (p(1) < mesh%xmin .OR. p(1) > mesh%xmax .OR. p(2) < mesh%ymin .OR. p(2) > mesh%ymax) THEN
@@ -1652,18 +1661,18 @@ MODULE mesh_help_functions_module
     ! It's not. Perform a flood-fill style outward search.
 
     ! Initialise map and stack.
-    mesh%TriMap     = 0
-    mesh%TriStack1  = 0
-    mesh%TriStack2  = 0
-    mesh%TriStackN1 = 0
-    mesh%TriStackN2 = 0
-    mesh%TriMap(t)  = 1 ! We checked that one.
+    TriMap     = 0
+    TriStack1  = 0
+    TriStack2  = 0
+    TriStackN1 = 0
+    TriStackN2 = 0
+    TriMap(t)  = 1 ! We checked that one.
 
     ! Add t' neighbours to the stack.
     DO n = 1, 3
       IF (mesh%TriC(t,n) > 0) THEN
-        mesh%TriStackN1 = mesh%TriStackN1+1
-        mesh%TriStack1( mesh%TriStackN1) = mesh%TriC(t,n)
+        TriStackN1 = TriStackN1+1
+        TriStack1( TriStackN1) = mesh%TriC(t,n)
       END IF
     END DO
 
@@ -1672,11 +1681,11 @@ MODULE mesh_help_functions_module
       ! Check all triangles in the stack. If they're not it, add their
       ! non-checked neighbours to the new stack.
 
-      mesh%TriStack2  = 0
-      mesh%TriStackN2 = 0
+      TriStack2  = 0
+      TriStackN2 = 0
 
-      DO n = 1, mesh%TriStackN1
-        ti = mesh%TriStack1(n)
+      DO n = 1, TriStackN1
+        ti = TriStack1(n)
         q = mesh%V(mesh%Tri(ti,1),:)
         r = mesh%V(mesh%Tri(ti,2),:)
         s = mesh%V(mesh%Tri(ti,3),:)
@@ -1693,26 +1702,31 @@ MODULE mesh_help_functions_module
           DO n2 = 1, 3
             tin = mesh%TriC(ti,n2)
             IF (tin==0)              CYCLE ! This neighbour doesn't exist.
-            IF (mesh%TriMap(tin)==1) CYCLE ! This neighbour has already been checked or is already in the stack.
-            mesh%TriStackN2 = mesh%TriStackN2 + 1
-            mesh%TriStack2( mesh%TriStackN2) = tin
-            mesh%TriMap(tin) = 1
+            IF (TriMap(tin)==1) CYCLE ! This neighbour has already been checked or is already in the stack.
+            TriStackN2 = TriStackN2 + 1
+            TriStack2( TriStackN2) = tin
+            TriMap(tin) = 1
           END DO
 
         END IF ! IF (is_in_triangle(q, r, s, p, tol)) THEN
       END DO ! DO n = 1, mesh%triStackN1
 
       ! Cycle stacks.
-      mesh%TriStack1  = mesh%TriStack2
-      mesh%TriStackN1 = mesh%TriStackN2
+      TriStack1  = TriStack2
+      TriStackN1 = TriStackN2
 
       ! If no more non-checked neighbours could be found, terminate and throw an error.
-      IF (mesh%TriStackN2==0) THEN
+      IF (TriStackN2==0) THEN
         WRITE(0,*) 'find_containing_triangle - ERROR: couldnt find triangle containing this point!'
         error STOP
       END IF
 
     END DO ! DO WHILE (.NOT. FoundIt)
+
+
+    deallocate( TriMap    )
+    deallocate( TriStack1 )
+    deallocate( TriStack2 )
 
 
   END SUBROUTINE find_containing_triangle
@@ -2396,7 +2410,7 @@ MODULE mesh_help_functions_module
 
     IMPLICIT NONE
 
-    TYPE(type_mesh),          INTENT(INOUT)       :: mesh
+    TYPE(type_mesh),          INTENT(IN)          :: mesh
     REAL(dp), DIMENSION(:),   INTENT(IN)          :: d
     REAL(dp), DIMENSION(2),   INTENT(IN)          :: p
     INTEGER,                  INTENT(INOUT)       :: ti
@@ -2432,7 +2446,7 @@ MODULE mesh_help_functions_module
 
     IMPLICIT NONE
 
-    TYPE(type_mesh),          INTENT(INOUT)       :: mesh
+    TYPE(type_mesh),          INTENT(IN)          :: mesh
     INTEGER,  DIMENSION(:),   INTENT(IN)          :: d
     REAL(dp), DIMENSION(2),   INTENT(IN)          :: p
     INTEGER,                  INTENT(INOUT)       :: ti

@@ -7,7 +7,7 @@ module scalar_data_output_module
   use mpi
   use configuration_module, only : dp, C, routine_path, init_routine, finalise_routine, crash, warning
   use parallel_module,      only : par, sync, ierr
-  use data_types_module,    only : type_global_scalar_data, type_model_region, type_forcing_data
+  use data_types_module,    only : type_global_scalar_data, type_model_region, type_model_regions, type_forcing_data
   use netcdf_module,        only : create_global_scalar_output_file, write_to_global_scalar_output_file, &
                                    create_regional_scalar_output_file, write_to_regional_scalar_output_file
   implicit none
@@ -17,13 +17,13 @@ contains
 ! ===== Global =====
 ! ==================
 
-  subroutine write_global_scalar_data( NAM, EAS, GRL, ANT, forcing, global_data, time)
+  subroutine write_global_scalar_data( regions, forcing, global_data, time)
     ! Collect some global scalar data values and write to the NetCDF output file
 
     implicit none
 
     ! Input variables:
-    type(type_model_region),       intent(in)    :: NAM, EAS, GRL, ANT
+    type(type_model_regions),      intent(in)    :: regions
     type(type_forcing_data),       intent(in)    :: forcing
     type(type_global_scalar_data), intent(inout) :: global_data
     real(dp),                      intent(in)    :: time
@@ -33,6 +33,7 @@ contains
 
     ! Add routine to path
     call init_routine( routine_name)
+
 
     if (par%master) then
 
@@ -73,6 +74,8 @@ contains
       global_data%tcomp_climate = 0._dp
       global_data%tcomp_GIA     = 0._dp
 
+      associate(NAM => regions%NAM, EAS => regions%EAS, GRL => regions%GRL, ANT => regions%ANT)
+
       if (C%do_NAM) then
         global_data%tcomp_total   = global_data%tcomp_total   + NAM%tcomp_total
         global_data%tcomp_ice     = global_data%tcomp_ice     + NAM%tcomp_ice
@@ -101,6 +104,8 @@ contains
         global_data%tcomp_climate = global_data%tcomp_climate + ANT%tcomp_climate
         global_data%tcomp_GIA     = global_data%tcomp_GIA     + ANT%tcomp_GIA
       end if
+
+      end associate
 
       ! Write to output file
       call write_to_global_scalar_output_file( global_data, time)

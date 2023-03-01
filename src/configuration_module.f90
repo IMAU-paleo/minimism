@@ -1372,8 +1372,9 @@ CONTAINS
 
     ! Local variables:
     CHARACTER(LEN=256),INTENT(IN) :: config_filename
+    character(len=1000) :: line
 
-    INTEGER, PARAMETER :: config_unit = 28 ! Unit number which is used for the configuration file.
+    INTEGER            :: config_unit ! Unit number which is used for the configuration file.
     INTEGER            :: ios
 
     ! The NAMELIST that's used to read the external config file.
@@ -1766,7 +1767,7 @@ CONTAINS
 
      IF (config_filename == '') RETURN
 
-     OPEN(UNIT=config_unit, FILE=trim(config_filename), STATUS='OLD', ACTION='READ', iostat=ios)
+     OPEN(newunit=config_unit, FILE=trim(config_filename), STATUS='OLD', ACTION='READ', iostat=ios)
      IF(ios /= 0) THEN
        WRITE(UNIT=*, FMT='(/3A/)') ' ERROR: Could not open the configuration file: ', trim(config_filename)
        STOP
@@ -1774,12 +1775,18 @@ CONTAINS
 
      ! In the following statement the entire configuration file is read, using the namelist (NML=CONFIG)
      READ(UNIT=config_unit, NML=CONFIG, IOSTAT=ios)
-     CLOSE(UNIT=config_unit)
 
-     IF(ios /= 0) THEN
-       WRITE(UNIT=*, FMT='(/3A)') ' ERROR while reading configuration file: ', trim(config_filename)
-       STOP
-     END IF
+     if(ios /= 0) THEN
+       backspace(config_unit)
+       read(config_unit,fmt='(A)') line
+       write(*,*) ' ERROR while reading configuration file: ' // trim(config_filename)
+       write(*,*) ' Invalid line in namelist: '
+       write(*,*) '    ', trim(line)
+       close(unit=config_unit)
+       error stop 
+     end if
+
+     close(unit=config_unit)
 
   END SUBROUTINE read_config_file
 

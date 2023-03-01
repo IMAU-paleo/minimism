@@ -47,10 +47,13 @@ contains
 
       case ('none')
         ! No need to do anything
+      case('idealised')
+        call run_climate_model_idealised( region%mesh, region%ice, region%climate_matrix%applied, time)
 
       case('PD_obs')
         ! Keep the climate fixed to present-day observed conditions
         call run_climate_model_PD_obs( region%mesh, region%ice, region%climate_matrix, region%name)
+
 
       case('matrix_warm_cold')
         ! Use the warm/cold climate matrix method
@@ -92,6 +95,8 @@ contains
     select case (C%choice_climate_model)
 
       case('none')
+        ! No need to do anything
+      case('idealised')
         ! No need to do anything
 
       case('PD_obs')
@@ -141,6 +146,10 @@ contains
       case('none')
         ! No need to do anything
 
+      case ('idealised')
+      ! Only need to allocate memory for the "applied" regional snapshot
+      CALL allocate_climate_snapshot_regional( region%mesh, region%climate_matrix%applied, name = 'applied')
+
       case('PD_obs')
         ! Keep the climate fixed to present-day observed conditions
         call initialise_climate_model_regional_PD_obs( region%mesh, region%ice, climate_matrix_global, region%climate_matrix, region%name)
@@ -159,6 +168,127 @@ contains
     call finalise_routine( routine_name, n_extra_windows_expected=113)
 
   end subroutine initialise_climate_model_regional
+
+  SUBROUTINE run_climate_model_idealised( mesh, ice, climate, time)
+    ! Run the regional climate model
+    !
+    ! Assign some idealised temperature/precipitation
+
+    IMPLICIT NONE
+
+    ! In/output variables:
+    TYPE(type_mesh),                      INTENT(IN)    :: mesh
+    TYPE(type_ice_model),                 INTENT(IN)    :: ice
+    TYPE(type_climate_snapshot_regional), INTENT(INOUT) :: climate
+    REAL(dp),                             INTENT(IN)    :: time
+
+    ! Local variables:
+    CHARACTER(LEN=256), PARAMETER                       :: routine_name = 'run_climate_model_idealised'
+
+    ! Add routine to path
+    CALL init_routine( routine_name)
+
+    IF     (C%choice_idealised_climate == 'EISMINT1_A' .OR. &
+            C%choice_idealised_climate == 'EISMINT1_B' .OR. &
+            C%choice_idealised_climate == 'EISMINT1_C' .OR. &
+            C%choice_idealised_climate == 'EISMINT1_D' .OR. &
+            C%choice_idealised_climate == 'EISMINT1_E' .OR. &
+            C%choice_idealised_climate == 'EISMINT1_F') THEN
+      CALL run_climate_model_idealised_EISMINT1( mesh, ice, climate, time)
+    ELSE
+      CALL crash('unknown choice_idealised_climate"' // TRIM(C%choice_idealised_climate) // '"!')
+    END IF
+
+    ! Finalise routine path
+    CALL finalise_routine( routine_name)
+
+  END SUBROUTINE run_climate_model_idealised
+
+  SUBROUTINE run_climate_model_idealised_EISMINT1( mesh, ice, climate, time)
+    ! Temperature for the EISMINT1 experiments (Huybrechts et al., 1996)
+
+    IMPLICIT NONE
+
+    TYPE(type_mesh),                      INTENT(IN)    :: mesh
+    TYPE(type_ice_model),                 INTENT(IN)    :: ice
+    TYPE(type_climate_snapshot_regional), INTENT(INOUT) :: climate
+    REAL(dp),                             INTENT(IN)    :: time
+
+    ! Local variables:
+    CHARACTER(LEN=256), PARAMETER                       :: routine_name = 'run_climate_model_idealised_EISMINT1'
+    REAL(dp), PARAMETER                                 :: x_summit = 0._dp      ! x-coordinate of ice divide [m]
+    REAL(dp), PARAMETER                                 :: y_summit = 0._dp      ! y-coordinate of ice divide [m]
+    INTEGER                                             :: vi
+    REAL(dp)                                            :: x, y, d, T, dT
+
+    ! Add routine to path
+    CALL init_routine( routine_name)
+
+    ! Set precipitation to zero - SMB is parameterised anyway...
+    climate%Precip( mesh%vi1:mesh%vi2,:) = 0._dp
+
+    ! Baseline temperature
+    IF     (C%choice_idealised_climate == 'EISMINT1_A' .OR. &
+            C%choice_idealised_climate == 'EISMINT1_B' .OR. &
+            C%choice_idealised_climate == 'EISMINT1_C') THEN
+      ! Moving margin: Huybrechts et al., Eq. 11
+
+      DO vi = mesh%vi1, mesh%vi2
+        ! Calculate baseline temperature
+        climate%T2m( vi,:) = 270._dp - 0.01_dp * ice%Hs_a( vi)
+      END DO
+
+    ELSEIF (C%choice_idealised_climate == 'EISMINT1_D' .OR. &
+            C%choice_idealised_climate == 'EISMINT1_E' .OR. &
+            C%choice_idealised_climate == 'EISMINT1_F') THEN
+      ! Fixed margin: Huybrechts et al., Eq. 9
+
+      DO vi = mesh%vi1, mesh%vi2
+
+        ! Calculate distance from ice divide (for fixed margin experiments, use square distance)
+        x = mesh%V( vi,1)
+        y = mesh%V( vi,2)
+        d = MAX( ABS( x - x_summit), ABS( y - y_summit)) / 1E3_dp  ! [km]
+
+        ! Calculate baseline temperature
+        climate%T2m( vi,:) = 239._dp + (8.0E-08_dp * d**3)
+
+      END DO
+
+    ELSE
+      CALL crash('unknown choice_idealised_climate"' // TRIM(C%choice_idealised_climate) // '"!')
+    END IF
+    CALL sync
+
+    ! Add temperature change for the glacial cycle experiments
+    IF     (C%choice_idealised_climate == 'EISMINT1_B' .OR. &
+            C%choice_idealised_climate == 'EISMINT1_E') THEN
+      ! 20,000-yr cyclicity
+
+      T = 20E3_dp
+
+      IF (time > 0._dp) THEN
+        dT = 10._dp * SIN( 2._dp * pi * time / T)
+        climate%T2m( mesh%vi1:mesh%vi2,:) = climate%T2m( mesh%vi1:mesh%vi2,:) + dT
+      END IF
+
+    ELSEIF (C%choice_idealised_climate == 'EISMINT1_C' .OR. &
+            C%choice_idealised_climate == 'EISMINT1_F') THEN
+      ! 40,000-yr cyclicity
+
+      T = 40E3_dp
+
+      IF (time > 0._dp) THEN
+        dT = 10._dp * SIN( 2._dp * pi * time / T)
+        climate%T2m( mesh%vi1:mesh%vi2,:) = climate%T2m( mesh%vi1:mesh%vi2,:) + dT
+      END IF
+
+    END IF
+
+    ! Finalise routine path
+    CALL finalise_routine( routine_name)
+
+  END SUBROUTINE run_climate_model_idealised_EISMINT1
 
 ! ===== Observational PD climate =====
 ! ====================================
@@ -795,6 +925,8 @@ contains
     select case (C%choice_climate_model)
 
       case ('none')
+        ! No need to do anything
+      case ('idealised')
         ! No need to do anything
 
       case ('PD_obs')
