@@ -7,6 +7,8 @@ module validation_module
 
   implicit none
   character(len=1000)                          :: error_message
+  integer                                      :: vreport
+  character(len=:), allocatable                :: vreport_filename
 
 contains
   subroutine validate( regions )
@@ -15,8 +17,14 @@ contains
     type(type_model_regions), intent(in)       :: regions
 
     logical                                    :: passed
+    integer                                    :: ios
 
     if (.not. C%do_benchmark_experiment) return
+
+    ! Open file to write report to
+    vreport_filename = trim(C%output_dir) // '/validation_report.txt'
+    open(newunit=vreport, file=vreport_filename)
+
     select case (C%choice_benchmark_experiment)
       case('EISMINT_1')
         call check_eismint_1(regions%ANT, passed)
@@ -28,6 +36,18 @@ contains
         error stop 'We should implement validation for benchmark experiment ' // C%choice_benchmark_experiment
     end select
 
+    ! Also output vreport to stderr
+    rewind(vreport)
+    do
+      read(vreport,'(A)',iostat=ios) error_message
+      if (ios.ne.0) exit
+      write(0,'(A)') trim(error_message)
+    end do
+
+    ! Clean up 
+    close(vreport)
+
+    ! Error or exit
     if (.not. passed) then
       error stop "some validation tests failed, please check the log"
     end if
@@ -69,7 +89,7 @@ contains
       call mesh_bilinear_dp(region%mesh,Ti_level_a(:,zi), point, ti, v)
       ! Check the temperature in the middle is lower than 273.15 - 10 Kelvin
       if (v > 263.5_dp) then
-        write(*,*) "Basal temperature in the center is too high!: ",v," > 263.5"
+        write(vreport,*) "Basal temperature in the center is too high!: ",v," > 263.5"
         passed = .false.
       end if
 
@@ -77,7 +97,7 @@ contains
       call mesh_bilinear_dp(region%mesh,Hi_a, point, ti, v)
       ! Check the ice thickness is larger than 3000m
       if (v < 2800._dp) then
-        write(*,*) "Ice thickness in the center is too low!: ",v," < 2800."
+        write(vreport,*) "Ice thickness in the center is too low!: ",v," < 2800."
         passed = .false.
       end if
 
@@ -89,7 +109,7 @@ contains
       call mesh_bilinear_dp(region%mesh,Ti_level_a(:,zi), point, ti, v)
       ! Check the temperature
       if (v > 265._dp) then
-        write(*,*) "Basal temperature 100km from center is too high!: ",v," > 265.0"
+        write(vreport,*) "Basal temperature 100km from center is too high!: ",v," > 265.0"
         passed = .false.
       end if
 
@@ -100,7 +120,7 @@ contains
       call mesh_bilinear_dp(region%mesh,Ti_level_a(:,zi), point, ti, v)
       ! Check the temperature
       if (v > 269._dp) then
-        write(*,*) "Basal temperature 200km from center is too high!: ",v," > 269.0"
+        write(vreport,*) "Basal temperature 200km from center is too high!: ",v," > 269.0"
         passed = .false.
       end if
 

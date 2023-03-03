@@ -17,6 +17,7 @@ on:
 
 jobs:
   build:
+    if: github.event.pull_request.draft == false
     name: Build  and Test Minimism
     runs-on: ubuntu-22.04
 
@@ -51,7 +52,7 @@ jobs:
         if: ${{ always() }}
         run: |
           cd tests
-          ./eismint_1_images.py || true
+          ./eismint_1_images.py
 
       - name: Run ISMIP_HOM_A
         if: ${{ always() }}
@@ -86,7 +87,7 @@ jobs:
       - name: Commit pictures to the validation repository
         if: ${{ always() }}
         run: |
-          mkdir validation_plots/${{ github.sha }}/
+          mkdir -p validation_plots/${{ github.sha }}/
           cp tests/*.png validation_plots/${{ github.sha }}/
           cd validation_plots
           git add ${{ github.sha }} 
@@ -107,13 +108,23 @@ jobs:
           user-name: "Minimism Github Action"
           target-branch: "main"
 
-      - name: Comment with plots on pull requests
+      - name: Create comment for the pull request
+        if: ${{ always() }}
+        run: |
+          echo "I, GAB, the github action bot, hereby present you with some results for some
+                tests that I have run with the code that you wrote:" > comment.txt
+          echo "#### Reports (nothing is good)" >> comment.txt
+          echo "" >> comment.txt
+          cd tests
+          ./get_vreports.sh >> ../comment.txt
+          cd ../
+          echo "" >> comment.txt
+          echo "#### Images" >> comment.txt
+          echo "<img src=\"https://raw.githubusercontent.com/IMAU-paleo/validation_plots/main/${{ github.sha }}/eismint_1_hi.png\" width=50%>" >> comment.txt
+
+
+      - name: Comment on pull request
         if: ${{ always() }}
         uses: thollander/actions-comment-pull-request@v2
         with:
-          message: "I, GAB, the github action bot, hereby present you with some results for some
-            tests that I have run with the code that you wrote: 
-            
-            ![eismint_1_hi.png](https://raw.githubusercontent.com/IMAU-paleo/validation_plots/main/${{ github.sha }}/eismint_1_hi.png)
-            
-            If these plots look strange to you, probably you have to fix some bugs in your code :upside_down_face:"
+          filePath: comment.txt
