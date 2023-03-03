@@ -263,32 +263,42 @@ CONTAINS
 
     ! Local variables:
     CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'map_mesh2grid_3D'
-    INTEGER                                            :: n1,n2,n,i,j,nz
+    INTEGER                                            :: n1,n2,m1,m2,x1,x2,n,i,j,nz,err
     REAL(dp), DIMENSION(:,:  ), POINTER                ::  d_grid_vec
-    INTEGER                                            :: wd_grid_vec
 
     ! Add routine to path
     CALL init_routine( routine_name)
 
+    CALL partition_list( grid%nx, par%i, par%n, x1, x2)
+    CALL partition_list( mesh%nV,par%i,par%n, m1, m2)
+
     ! Safety
-    IF (SIZE( d_mesh,1) /= mesh%nV .OR. SIZE( d_grid,1) /= grid%nx .OR. SIZE( d_grid,2) /= grid%ny .OR. SIZE( d_mesh,2) /= SIZE( d_grid,3)) THEN
+    IF (SIZE( d_mesh,1) /= m2-m1+1 .OR. SIZE( d_grid,1) /= x2-x1+1 .OR. SIZE( d_grid,2) /= grid%ny .OR. SIZE( d_mesh,2) /= SIZE( d_grid,3)) THEN
+      write(*,*) size(d_mesh,1), m2-m1+1
+      write(*,*) size(d_mesh,2), size(d_grid,3)
+      write(*,*) size(d_grid,1), x2-x1+1
+      write(*,*) size(d_grid,2), grid%ny
       CALL crash('data fields are the wrong size!')
     END IF
 
     nz = SIZE( d_grid,3)
 
+    CALL partition_list( grid%n, par%i, par%n, n1, n2)
+    
     ! Allocate shared memory
     allocate( d_grid_vec( grid%n, nz ))
 
     ! Perform the mapping operation as a matrix multiplication
-    CALL multiply_PETSc_matrix_with_vector_2D( grid%M_map_mesh2grid, d_mesh, d_grid_vec)
+    CALL multiply_PETSc_matrix_with_vector_2D( grid%M_map_mesh2grid, d_mesh, d_grid_vec(n1:n2,:))
 
     ! Reshape data from vector form to grid form
     CALL partition_list( grid%n, par%i, par%n, n1, n2)
     DO n = 1, grid%n
       i = grid%n2ij( n,1)
       j = grid%n2ij( n,2)
-      d_grid( i,j,:) = d_grid_vec( n,:)
+      if (x1 <= i .and. i <= x2) then
+        d_grid( i-x1+1,j,:) = d_grid_vec( n,:)
+      endif
     END DO
 
     ! Clean up after yourself

@@ -50,7 +50,7 @@ program UFEMISM_program
 
   use mpi
   use petscksp
-  use data_types_module,         only : type_netcdf_resource_tracker, type_model_region, &
+  use data_types_module,         only : type_netcdf_resource_tracker, type_model_regions, &
                                         type_climate_matrix_global, type_ocean_matrix_global, &
                                         type_global_scalar_data
   use parallel_module,           only : initialise_parallelisation, par, sync, ierr
@@ -65,6 +65,7 @@ program UFEMISM_program
   use UFEMISM_main_model,        only : initialise_model, run_model
   use general_sea_level_module,  only : update_regional_sea_level, determine_GMSL_contributions
   use scalar_data_output_module, only : initialise_global_scalar_data, write_global_scalar_data
+  use validation_module,         only : validate
 
 ! ===== Main variables =====
 ! ==========================
@@ -74,7 +75,7 @@ program UFEMISM_program
   character(len=256), parameter        :: version_number = '0.1'
 
   ! The four model regions
-  type(type_model_region), allocatable :: NAM, EAS, GRL, ANT
+  type(type_model_regions)             :: regions
 
   ! The global climate/ocean matrices
   TYPE(type_climate_matrix_global)     :: climate_matrix_global
@@ -93,7 +94,7 @@ program UFEMISM_program
 ! ===== START =====
 ! =================
 
-  allocate(NAM,EAS,GRL,ANT)
+  allocate(regions%NAM,regions%EAS,regions%GRL,regions%ANT)
 
   routine_path = 'UFEMISM_program'
 
@@ -152,10 +153,10 @@ program UFEMISM_program
   ! == Initialise the model regions
   ! ===============================
 
-  if (C%do_NAM) call initialise_model( NAM, 'NAM', climate_matrix_global, ocean_matrix_global)
-  if (C%do_EAS) call initialise_model( EAS, 'EAS', climate_matrix_global, ocean_matrix_global)
-  if (C%do_GRL) call initialise_model( GRL, 'GRL', climate_matrix_global, ocean_matrix_global)
-  if (C%do_ANT) call initialise_model( ANT, 'ANT', climate_matrix_global, ocean_matrix_global)
+  if (C%do_NAM) call initialise_model( regions%NAM, 'NAM', climate_matrix_global, ocean_matrix_global)
+  if (C%do_EAS) call initialise_model( regions%EAS, 'EAS', climate_matrix_global, ocean_matrix_global)
+  if (C%do_GRL) call initialise_model( regions%GRL, 'GRL', climate_matrix_global, ocean_matrix_global)
+  if (C%do_ANT) call initialise_model( regions%ANT, 'ANT', climate_matrix_global, ocean_matrix_global)
 
 ! ===== The big time loop =====
 ! =============================
@@ -174,19 +175,19 @@ program UFEMISM_program
     ! ============================
 
     ! Update regional sea level
-    call update_regional_sea_level( NAM, EAS, GRL, ANT, global_data, t_coupling)
+    call update_regional_sea_level( regions, global_data, t_coupling)
 
     ! == Global sea level update
     ! ==========================
 
     ! Determine ice sheets GMSL contributions and new global sea level
-    call determine_GMSL_contributions( NAM, EAS, GRL, ANT, global_data, t_coupling)
+    call determine_GMSL_contributions( regions, global_data, t_coupling)
 
     ! == Global output
     ! ================
 
     ! Write global data to output file
-    call write_global_scalar_data( NAM, EAS, GRL, ANT, forcing, global_data, t_coupling)
+    call write_global_scalar_data( regions, forcing, global_data, t_coupling)
 
     ! == Regional model runs
     ! ======================
@@ -194,10 +195,10 @@ program UFEMISM_program
     ! Run all four model regions for C%dt_coupling years
     t_end_models = min(C%end_time_of_run, t_coupling + C%dt_coupling)
 
-    if (C%do_NAM) call run_model( NAM, climate_matrix_global, t_end_models)
-    if (C%do_EAS) call run_model( EAS, climate_matrix_global, t_end_models)
-    if (C%do_GRL) call run_model( GRL, climate_matrix_global, t_end_models)
-    if (C%do_ANT) call run_model( ANT, climate_matrix_global, t_end_models)
+    if (C%do_NAM) call run_model( regions%NAM, climate_matrix_global, t_end_models)
+    if (C%do_EAS) call run_model( regions%EAS, climate_matrix_global, t_end_models)
+    if (C%do_GRL) call run_model( regions%GRL, climate_matrix_global, t_end_models)
+    if (C%do_ANT) call run_model( regions%ANT, climate_matrix_global, t_end_models)
 
     ! == Advance coupling time
     ! ========================
@@ -216,6 +217,11 @@ program UFEMISM_program
 
 ! ===== END =====
 ! ===============
+
+! == Validate benchmark experiments ==
+! ====================================
+  call validate(regions)
+
 
   ! == Total elapsed time
   ! =====================

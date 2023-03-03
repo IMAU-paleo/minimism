@@ -77,9 +77,6 @@ CONTAINS
     if ( allocated(mesh%VMap          )) deallocate( mesh%VMap          )
     if ( allocated(mesh%VStack1       )) deallocate( mesh%VStack1       )
     if ( allocated(mesh%VStack2       )) deallocate( mesh%VStack2       )
-    if ( allocated(mesh%TriMap        )) deallocate( mesh%TriMap        )
-    if ( allocated(mesh%TriStack1     )) deallocate( mesh%TriStack1     )
-    if ( allocated(mesh%TriStack2     )) deallocate( mesh%TriStack2     )
     if ( allocated(mesh%POI_coordinates   )) deallocate(mesh%POI_coordinates   )
     if ( allocated(mesh%POI_XY_coordinates)) deallocate(mesh%POI_XY_coordinates)
     if ( allocated(mesh%POI_resolutions   )) deallocate(mesh%POI_resolutions   )
@@ -107,9 +104,6 @@ CONTAINS
     allocate( mesh%VMap           (nV_mem          ), source=0)
     allocate( mesh%VStack1        (nV_mem          ), source=0)
     allocate( mesh%VStack2        (nV_mem          ), source=0)
-    allocate( mesh%TriMap         (nTri_mem        ), source=0)
-    allocate( mesh%TriStack1      (nTri_mem        ), source=0)
-    allocate( mesh%TriStack2      (nTri_mem        ), source=0)
 
     ! POI stuff
     IF (mesh%region_name == 'NAM') THEN
@@ -175,9 +169,6 @@ CONTAINS
     call reallocate( mesh%VMap,      nV_mem_new   )
     call reallocate( mesh%VStack1,   nV_mem_new   )
     call reallocate( mesh%VStack2,   nV_mem_new   )
-    call reallocate( mesh%TriMap,    nTri_mem_new )
-    call reallocate( mesh%TriStack1, nTri_mem_new )
-    call reallocate( mesh%TriStack2, nTri_mem_new )
 
     ! Finalise routine path
     CALL finalise_routine( routine_name)
@@ -222,9 +213,6 @@ CONTAINS
     call reallocate( mesh%VMap          , mesh%nV  )
     call reallocate( mesh%VStack1       , mesh%nV  )
     call reallocate( mesh%VStack2       , mesh%nV  )
-    call reallocate( mesh%TriMap        , mesh%nTri)
-    call reallocate( mesh%TriStack1     , mesh%nTri)
-    call reallocate( mesh%TriStack2     , mesh%nTri)
 
     ! Finalise routine path
     CALL finalise_routine( routine_name)
@@ -474,9 +462,6 @@ CONTAINS
     allocate( mesh%VMap           (nV_mem          ), source=0)
     allocate( mesh%VStack1        (nV_mem          ), source=0)
     allocate( mesh%VStack2        (nV_mem          ), source=0)
-    allocate( mesh%TriMap         (nTri_mem        ), source=0)
-    allocate( mesh%TriStack1      (nTri_mem        ), source=0)
-    allocate( mesh%TriStack2      (nTri_mem        ), source=0)
 
     ! POI stuff
     IF (mesh%region_name == 'NAM') THEN
@@ -539,9 +524,6 @@ CONTAINS
     call reallocate( mesh%VMap,      nV_mem_new   )
     call reallocate( mesh%VStack1,   nV_mem_new   )
     call reallocate( mesh%VStack2,   nV_mem_new   )
-    call reallocate( mesh%TriMap,    nTri_mem_new )
-    call reallocate( mesh%TriStack1, nTri_mem_new )
-    call reallocate( mesh%TriStack2, nTri_mem_new )
 
     ! Finalise routine path
     CALL finalise_routine( routine_name)
@@ -586,9 +568,6 @@ CONTAINS
     call reallocate( mesh%VMap          , mesh%nV  )
     call reallocate( mesh%VStack1       , mesh%nV  )
     call reallocate( mesh%VStack2       , mesh%nV  )
-    call reallocate( mesh%TriMap        , mesh%nTri)
-    call reallocate( mesh%TriStack1     , mesh%nTri)
-    call reallocate( mesh%TriStack2     , mesh%nTri)
 
     ! Finalise routine path
     CALL finalise_routine( routine_name)
@@ -725,10 +704,6 @@ CONTAINS
       allocate( submesh_right%VStack1       (   nV           ), source=0)
       allocate( submesh_right%VStack2       (   nV           ), source=0)
 
-      allocate( submesh_right%TriMap        (   nTri         ), source=0)
-      allocate( submesh_right%TriStack1     (   nTri         ), source=0)
-      allocate( submesh_right%TriStack2     (   nTri         ), source=0)
-
       ! ok now we can receive
       call mpi_recv( submesh_right%V,              nV*2      , mpi_real8  , p_right, 1, MPI_COMM_WORLD, status, ierr )
       call mpi_recv( submesh_right%nC,             nV        , mpi_integer, p_right, 2, MPI_COMM_WORLD, status, ierr )
@@ -752,9 +727,6 @@ CONTAINS
       call mpi_recv( submesh_right%VStack1,        nV        , mpi_integer, p_right,18, MPI_COMM_WORLD, status, ierr )
       call mpi_recv( submesh_right%VStack2,        nV        , mpi_integer, p_right,19, MPI_COMM_WORLD, status, ierr )
 
-      call mpi_recv( submesh_right%TriMap,         nTri      , mpi_integer, p_right,20, MPI_COMM_WORLD, status, ierr )
-      call mpi_recv( submesh_right%TriStack1,      nTri      , mpi_integer, p_right,21, MPI_COMM_WORLD, status, ierr )
-      call mpi_recv( submesh_right%TriStack2,      nTri      , mpi_integer, p_right,22, MPI_COMM_WORLD, status, ierr )
     else
    ! the right must send
       call mpi_send( submesh      %V,              nV*2      , mpi_real8  , p_left , 1, MPI_COMM_WORLD,         ierr )
@@ -779,9 +751,6 @@ CONTAINS
       call mpi_send( submesh      %VStack1,        nV        , mpi_integer, p_left ,18, MPI_COMM_WORLD,         ierr )
       call mpi_send( submesh      %VStack2,        nV        , mpi_integer, p_left ,19, MPI_COMM_WORLD,         ierr )
 
-      call mpi_send( submesh      %TriMap,         nTri      , mpi_integer, p_left ,20, MPI_COMM_WORLD,         ierr )
-      call mpi_send( submesh      %TriStack1,      nTri      , mpi_integer, p_left ,21, MPI_COMM_WORLD,         ierr )
-      call mpi_send( submesh      %TriStack2,      nTri      , mpi_integer, p_left ,22, MPI_COMM_WORLD,         ierr )
     endif
 
     ! Finalise routine path

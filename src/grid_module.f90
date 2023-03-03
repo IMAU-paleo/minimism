@@ -425,8 +425,12 @@ contains
      if (x_dst(1)-dx_dst/2._dp < x_src(1)-dx_src/2._dp            &
      .or.y_dst(1)-dy_dst/2._dp < y_src(1)-dy_src/2._dp            &
      .or.x_dst(nx_dst)+dx_dst/2._dp > x_src(nx_src)+dx_src/2._dp  &
-     .or.y_dst(nx_dst)+dy_dst/2._dp > y_src(ny_src)+dy_src/2._dp  &
+     .or.y_dst(ny_dst)+dy_dst/2._dp > y_src(ny_src)+dy_src/2._dp  &
      ) then
+       write(*,*) x_src(1), x_src(src%nx), dx_src/2._dp
+       write(*,*) y_src(1), y_src(src%ny), dy_src/2._dp
+       write(*,*) x_dst(1), x_dst(dst%nx), dx_dst/2._dp
+       write(*,*) y_dst(1), y_dst(dst%ny), dy_dst/2._dp
        error stop "source grid does not fully contain destination grid"
      end if
 

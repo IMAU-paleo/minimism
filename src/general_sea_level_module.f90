@@ -7,7 +7,7 @@ module general_sea_level_module
   use configuration_module, only : dp, C, routine_path, init_routine, finalise_routine, crash, warning
   use parameters_module,    only : ice_density, ocean_area, seawater_density
   use parallel_module,      only : par, sync, ierr
-  use data_types_module,    only : type_model_region, type_global_scalar_data
+  use data_types_module,    only : type_model_region, type_model_regions, type_global_scalar_data
   use forcing_module,       only : forcing, update_sealevel_at_model_time
   implicit none
 
@@ -16,13 +16,13 @@ contains
 ! ===== Regional sea level =====
 ! ==============================
 
-  subroutine update_regional_sea_level( NAM, EAS, GRL, ANT, global_data, time)
+  subroutine update_regional_sea_level( regions, global_data, time)
     ! Update regional sea level
 
     implicit none
 
     ! In/output variables:
-    type(type_model_region),       intent(inout) :: NAM, EAS, GRL, ANT
+    type(type_model_regions),      intent(inout) :: regions
     type(type_global_scalar_data), intent(inout) :: global_data
     real(dp),                      intent(in)    :: time
 
@@ -31,6 +31,8 @@ contains
 
     ! Add routine to path
     call init_routine( routine_name)
+
+    associate(NAM => regions%NAM, EAS => regions%EAS, GRL => regions%GRL, ANT => regions%ANT)
 
     select case (C%choice_sealevel_model)
 
@@ -70,6 +72,8 @@ contains
                     trim(C%choice_sealevel_model) // '"!')
 
     end select
+
+    end associate
 
     ! Finalise routine path
     call finalise_routine( routine_name)
@@ -199,13 +203,13 @@ contains
 
   end subroutine calculate_PD_sealevel_contribution
 
-  subroutine determine_GMSL_contributions( NAM, EAS, GRL, ANT, global_data, time)
+  subroutine determine_GMSL_contributions( regions, global_data, time)
     ! Determine current GMSL contributions from all simulated ice sheets
 
     implicit none
 
     ! In/output variables:
-    type(type_model_region),       intent(in)    :: NAM, EAS, GRL, ANT
+    type(type_model_regions),      intent(in)    :: regions
     type(type_global_scalar_data), intent(inout) :: global_data
     real(dp),                      intent(in)    :: time
 
@@ -214,6 +218,8 @@ contains
 
     ! Add routine to path
     call init_routine( routine_name)
+
+    associate(NAM => regions%NAM, EAS => regions%EAS, GRL => regions%GRL, ANT => regions%ANT)
 
     ! Set GMSL contributions of all simulated ice sheets (NetCDF version)
     global_data%GMSL_NAM = 0._dp
@@ -248,6 +254,8 @@ contains
                     trim(C%choice_sealevel_model) // '"!')
 
     end select
+
+    end associate
 
     ! Finalise routine path
     call finalise_routine( routine_name)

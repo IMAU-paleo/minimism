@@ -36,22 +36,22 @@ UFEMISM_program_objects = \
         parameters_module.o \
         utilities_module.o \
         sparse_matrix_module.o \
-        grid_module.o \
         mesh_memory_module.o \
         mesh_help_functions_module.o \
         mesh_Delaunay_module.o \
         mesh_operators_module.o \
         mesh_ArakawaC_module.o \
         mesh_mapping_module.o \
+        grid_module.o \
         mesh_is_good_triangle.o \
+        netcdf_module.o \
+        reference_fields_module.o \
         mesh_creation_module.o \
         mesh_update_module.o \
         zeta_module.o \
-        netcdf_module.o \
         forcing_module.o \
         climate_module.o \
         ocean_module.o \
-        reference_fields_module.o \
         basal_conditions_and_sliding_module.o \
         general_ice_model_data_module.o \
         general_sea_level_module.o \
@@ -64,6 +64,7 @@ UFEMISM_program_objects = \
         SMB_module.o \
         scalar_data_output_module.o \
         UFEMISM_main_model.o \
+        validation_module.o \
         UFEMISM_program.o
 
 # This rule is used to build an executable from the object files:

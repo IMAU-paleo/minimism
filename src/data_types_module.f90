@@ -273,9 +273,7 @@ module data_types_module
 
     ! Maps+stacks for FloodFill-ALLOCATABLEhing
     INTEGER,  DIMENSION(:    ), ALLOCATABLE :: VMap, VStack1, VStack2
-    INTEGER,  DIMENSION(:    ), ALLOCATABLE :: TriMap, TriStack1, TriStack2
     INTEGER                                 :: VStackN1, VStackN2
-    INTEGER                                 :: TriStackN1, TriStackN2
 
     ! Points-of-Interest
     INTEGER,                    ALLOCATABLE :: nPOI                          ! Number of Points of Interest (POI) in this mesh
@@ -1053,6 +1051,14 @@ module data_types_module
     REAL(dp)                                :: tcomp_mesh     = 0.
 
   END TYPE type_model_region
+  
+  type type_model_regions
+    ! convenience Container for the four regions
+    type(type_model_region), allocatable   :: NAM
+    type(type_model_region), allocatable   :: EAS
+    type(type_model_region), allocatable   :: GRL
+    type(type_model_region), allocatable   :: ANT
+  end type type_model_regions
 
   TYPE type_restart_data
     ! Restart data and NetCDF file

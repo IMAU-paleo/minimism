@@ -2051,7 +2051,7 @@ contains
     ! Local variables:
     CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'map_and_write_to_grid_netcdf_dp_2D'
     REAL(dp), DIMENSION(:,:  ), POINTER           :: d_grid
-    INTEGER                                       :: j1, j2, n
+    INTEGER                                       :: j1, j2
 
     ! Add routine to path
     CALL init_routine( routine_name)
@@ -2095,16 +2095,18 @@ contains
     ! Local variables:
     CHARACTER(LEN=256), PARAMETER                      :: routine_name = 'map_and_write_to_grid_netcdf_dp_3D'
     REAL(dp), DIMENSION(:,:,:), POINTER           :: d_grid
-    INTEGER                                       :: wd_grid
+    INTEGER                                       :: j1, j2
 
     ! Add routine to path
     CALL init_routine( routine_name)
+
+    call partition_list(grid%nx, par%i, par%n, j1,j2)
 
     ! Allocate shared memory
     allocate( d_grid(grid%nx, grid%ny, nz))
 
     ! Map data from the model mesh to the square grid
-    CALL map_mesh2grid_3D( mesh, grid, d_mesh, d_grid)
+    CALL map_mesh2grid_3D( mesh, grid, d_mesh, d_grid(j1:j2,:,:))
 
     ! Write grid data to NetCDF
     IF (par%master) CALL handle_error( nf90_put_var( ncid, id_var, d_grid, start=(/1, 1, 1, ti/) ))
