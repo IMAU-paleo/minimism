@@ -5,9 +5,12 @@
     let
     pkgs = nixpkgs.legacyPackages.x86_64-linux;
     mypython = pkgs.python310;
-    in with pkgs; {
+    in with pkgs; with mypython.pkgs; {
       devShell.x86_64-linux =
         mkShell { buildInputs = [
+            xarray
+            netcdf4
+            matplotlib
             gcc
             gfortran
             openmpi
