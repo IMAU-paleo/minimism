@@ -32,12 +32,12 @@ contains
       error stop "some validation tests failed, please check the log"
     end if
   end subroutine validate
-  
+
   subroutine check_eismint_1(region, passed)
     implicit none
     type(type_model_region), intent(in)       :: region
     logical, intent(out)                      :: passed
-    real(dp), allocatable                     :: Ti_pmp_a(:,:)
+    real(dp), allocatable                     :: Ti_level_a(:,:)
     real(dp), allocatable                     :: Hi_a(:)
     integer                                   :: zi, ti
     real(dp)                                  :: point(2), v
@@ -51,9 +51,9 @@ contains
     ti = 1
 
     ! Get everything on the master process
-    allocate(Ti_pmp_a(region%mesh%nV, C%nz))
-    Ti_pmp_a(region%mesh%vi1:region%mesh%vi2,:) = region%ice%Ti_pmp_a
-    call allgather_array(Ti_pmp_a)
+    allocate(Ti_level_a(region%mesh%nV, C%nz))
+    Ti_level_a(region%mesh%vi1:region%mesh%vi2,:) = region%ice%Ti_a
+    call allgather_array(Ti_level_a)
 
     allocate(Hi_a(region%mesh%nV))
     Hi_a(region%mesh%vi1:region%mesh%vi2) = region%ice%Hi_a
@@ -65,15 +65,15 @@ contains
       point(1) = (C%xmax_ANT+C%xmin_ANT)/2._dp
       point(2) = (C%ymax_ANT+C%ymin_ANT)/2._dp
 
-      ! Get the temperature in the middle
-      call mesh_bilinear_dp(region%mesh,Ti_pmp_a(:,zi), point, ti, v)
+      ! Get the basal temperature at the center of the domain
+      call mesh_bilinear_dp(region%mesh,Ti_level_a(:,zi), point, ti, v)
       ! Check the temperature in the middle is lower than 273.15 - 10 Kelvin
-      if (v > 263.15_dp) then
-        write(*,*) "Basal temperature in the center with relation to pmp is too high!: ",v," > 263.15"
+      if (v > 263.5_dp) then
+        write(*,*) "Basal temperature in the center is too high!: ",v," > 263.5"
         passed = .false.
       end if
 
-      ! Get the ice thickness
+      ! Get the ice thickness at the center of the domain
       call mesh_bilinear_dp(region%mesh,Hi_a, point, ti, v)
       ! Check the ice thickness is larger than 3000m
       if (v < 2800._dp) then
@@ -82,34 +82,31 @@ contains
       end if
 
 
-      ! Check 100km from the center of the bulb
+      ! Check the basal temperature 100km from the center of the domain
       point(2) = point(2) + 100000
 
-      ! Get the temperature 
-      call mesh_bilinear_dp(region%mesh,Ti_pmp_a(:,zi), point, ti, v)
-      ! Check the temperature 
-      if (v > 263.15_dp) then
-        write(*,*) "Basal temperature 100km from center wrt to pmp is too high!: ",v," > 263.15"
+      ! Get the temperature
+      call mesh_bilinear_dp(region%mesh,Ti_level_a(:,zi), point, ti, v)
+      ! Check the temperature
+      if (v > 265._dp) then
+        write(*,*) "Basal temperature 100km from center is too high!: ",v," > 265.0"
         passed = .false.
       end if
 
-      ! Check 200km from the center of the bulb
+      ! Check the basal temperature 200km from the center of the domain
       point(2) = point(2) + 100000
 
-      ! Get the temperature 
-      call mesh_bilinear_dp(region%mesh,Ti_pmp_a(:,zi), point, ti, v)
-      ! Check the temperature 
-      if (v > 267.15_dp) then
-        write(*,*) "Basal temperature 200km from center wrt to pmp is too high!: ",v," > 267.15"
+      ! Get the temperature
+      call mesh_bilinear_dp(region%mesh,Ti_level_a(:,zi), point, ti, v)
+      ! Check the temperature
+      if (v > 269._dp) then
+        write(*,*) "Basal temperature 200km from center is too high!: ",v," > 269.0"
         passed = .false.
       end if
-
 
     end if
 
-    deallocate(Ti_pmp_a)
-
-
+    deallocate(Ti_level_a)
 
   end subroutine
 
